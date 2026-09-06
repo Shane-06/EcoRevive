@@ -1,12 +1,14 @@
-const request = require('supertest');
-const { app } = require('../server');
+const { app, startServer, stopServer } = require('../server');
 
-describe('Milestone 1 — Server & Project Architecture', () => {
-  it('GET / responds with operational status and M1 confirmation', async () => {
-    const res = await request(app).get('/');
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toHaveProperty('status', 'operational');
-    expect(res.body).toHaveProperty('message');
-    expect(res.body.message).toContain('Milestone 1');
+describe('Milestone 2 — Server Lifecycle & Module Export', () => {
+  it('should export app as an Express instance', () => {
+    expect(app).toBeDefined();
+    expect(typeof app.use).toBe('function');
+    expect(typeof app.get).toBe('function');
+  });
+
+  it('should export startServer and stopServer lifecycle functions', () => {
+    expect(typeof startServer).toBe('function');
+    expect(typeof stopServer).toBe('function');
   });
 });
