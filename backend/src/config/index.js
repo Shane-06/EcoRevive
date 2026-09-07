@@ -25,6 +25,16 @@ const config = {
     secret: process.env.JWT_SECRET || 'development_jwt_secret_key_change_in_production',
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   },
+  providers: {
+    openMeteo: {
+      baseUrl: process.env.OPEN_METEO_BASE_URL || 'https://api.open-meteo.com/v1/forecast',
+      timeoutMs: parseInt(process.env.PROVIDER_TIMEOUT_MS || '5000', 10),
+    },
+    soilGrids: {
+      baseUrl: process.env.SOILGRIDS_BASE_URL || 'https://rest.isric.org/soilgrids/v2.0/properties/query',
+      timeoutMs: parseInt(process.env.PROVIDER_TIMEOUT_MS || '5000', 10),
+    },
+  },
 };
 
 module.exports = config;
