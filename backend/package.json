@@ -7,7 +7,10 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "test": "jest --passWithNoTests",
-    "lint": "eslint ."
+    "test:db": "jest src/tests/db.test.js src/tests/spatial.test.js --runInBand",
+    "lint": "eslint .",
+    "db:migrate": "node ../database/migrate.js",
+    "db:seed": "node ../database/seed.js"
   },
   "keywords": [
     "ecorevive",

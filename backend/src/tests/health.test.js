@@ -1,7 +1,12 @@
 const request = require('supertest');
 const app = require('../app');
+const { closePool } = require('../config/db');
 
 describe('Milestone 2 — Health & Root Endpoints', () => {
+  afterAll(async () => {
+    await closePool();
+  });
+
   describe('GET /', () => {
     it('should return 200 with root discovery payload', async () => {
       const res = await request(app).get('/');
@@ -24,6 +29,7 @@ describe('Milestone 2 — Health & Root Endpoints', () => {
       expect(res.body.data).toHaveProperty('version', '1.0.0');
       expect(res.body.data).toHaveProperty('timestamp');
       expect(res.body.data).toHaveProperty('uptime');
+      expect(res.body.data).toHaveProperty('database', 'connected');
     });
   });
 
@@ -34,6 +40,7 @@ describe('Milestone 2 — Health & Root Endpoints', () => {
       expect(res.body).toHaveProperty('success', true);
       expect(res.body.data).toHaveProperty('status', 'operational');
       expect(res.body.data).toHaveProperty('service', 'ecorevive-backend');
+      expect(res.body.data).toHaveProperty('database', 'connected');
     });
   });
 });
