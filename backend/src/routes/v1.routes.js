@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const { getHealthStatus } = require('../controllers/health.controller');
 const authRoutes = require('./auth.routes');
+const treeRoutes = require('./tree.routes');
 
 const router = Router();
 
@@ -16,8 +17,13 @@ router.get('/health', getHealthStatus);
  */
 router.use('/auth', authRoutes);
 
+/**
+ * Tree & Plantation routes under API v1
+ * @route /api/v1/trees
+ */
+router.use('/trees', treeRoutes);
+
 // Future milestone domain routes:
-// router.use('/trees', treeRoutes);
 // router.use('/environment', environmentRoutes);
 // router.use('/suitability', suitabilityRoutes);
 // router.use('/admin', adminRoutes);
