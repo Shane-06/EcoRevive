@@ -60,6 +60,62 @@ class TreeController {
       return next(err);
     }
   }
+
+  /**
+   * Handles GET /api/v1/trees/map
+   * Retrieves verified trees within a map bounding box viewport.
+   */
+  async getMapTrees(req, res, next) {
+    try {
+      const { minLat, minLng, maxLat, maxLng, page, pageSize } = req.query;
+      const result = await treeService.getTreesInMapViewport({
+        minLat,
+        minLng,
+        maxLat,
+        maxLng,
+        page,
+        pageSize,
+      });
+
+      return sendSuccess(res, result, 200);
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  /**
+   * Handles GET /api/v1/trees/nearby
+   * Retrieves verified trees within radius in meters of a coordinate.
+   */
+  async getNearbyTrees(req, res, next) {
+    try {
+      const { lat, lng, radiusMeters } = req.query;
+      const result = await treeService.getNearbyTrees({
+        lat,
+        lng,
+        radiusMeters,
+      });
+
+      return sendSuccess(res, result, 200);
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  /**
+   * Handles GET /api/v1/trees/:treeId/location
+   * Retrieves the geographic location of a single public verified tree.
+   */
+  async getTreeLocation(req, res, next) {
+    try {
+      const { treeId } = req.params;
+      const result = await treeService.getTreeLocation(treeId);
+
+      return sendSuccess(res, result, 200);
+    } catch (err) {
+      return next(err);
+    }
+  }
 }
 
 module.exports = new TreeController();

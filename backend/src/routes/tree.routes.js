@@ -31,4 +31,25 @@ router.get(
   treeController.getMyTrees.bind(treeController)
 );
 
+/**
+ * @route GET /api/v1/trees/map
+ * @desc Retrieve verified trees inside map viewport bounding box
+ * @access Public
+ */
+router.get('/map', treeController.getMapTrees.bind(treeController));
+
+/**
+ * @route GET /api/v1/trees/nearby
+ * @desc Retrieve verified trees nearby a coordinate within radius in meters
+ * @access Public
+ */
+router.get('/nearby', treeController.getNearbyTrees.bind(treeController));
+
+/**
+ * @route GET /api/v1/trees/:treeId/location
+ * @desc Retrieve location of a single verified tree by public Tree ID
+ * @access Public
+ */
+router.get('/:treeId/location', treeController.getTreeLocation.bind(treeController));
+
 module.exports = router;
