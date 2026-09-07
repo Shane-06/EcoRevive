@@ -21,6 +21,10 @@ const config = {
     idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT || '30000', 10),
     connectionTimeoutMillis: parseInt(process.env.DB_CONN_TIMEOUT || '5000', 10),
   },
+  jwt: {
+    secret: process.env.JWT_SECRET || 'development_jwt_secret_key_change_in_production',
+    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  },
 };
 
 module.exports = config;
