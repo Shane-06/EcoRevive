@@ -5,6 +5,7 @@ const treeRoutes = require('./tree.routes');
 const environmentRoutes = require('./environment.routes');
 const speciesRoutes = require('./species.routes');
 const suitabilityRoutes = require('./suitability.routes');
+const adminRoutes = require('./admin.routes');
 
 const router = Router();
 
@@ -44,7 +45,10 @@ router.use('/species', speciesRoutes);
  */
 router.use('/suitability', suitabilityRoutes);
 
-// Future milestone domain routes:
-// router.use('/admin', adminRoutes);
+/**
+ * Admin & Verification routes under API v1
+ * @route /api/v1/admin
+ */
+router.use('/admin', adminRoutes);
 
 module.exports = router;
