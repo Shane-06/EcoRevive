@@ -3,6 +3,8 @@ const { getHealthStatus } = require('../controllers/health.controller');
 const authRoutes = require('./auth.routes');
 const treeRoutes = require('./tree.routes');
 const environmentRoutes = require('./environment.routes');
+const speciesRoutes = require('./species.routes');
+const suitabilityRoutes = require('./suitability.routes');
 
 const router = Router();
 
@@ -30,8 +32,19 @@ router.use('/trees', treeRoutes);
  */
 router.use('/environment', environmentRoutes);
 
+/**
+ * Species catalog routes under API v1
+ * @route /api/v1/species
+ */
+router.use('/species', speciesRoutes);
+
+/**
+ * Suitability assessment routes under API v1
+ * @route /api/v1/suitability
+ */
+router.use('/suitability', suitabilityRoutes);
+
 // Future milestone domain routes:
-// router.use('/suitability', suitabilityRoutes);
 // router.use('/admin', adminRoutes);
 
 module.exports = router;
