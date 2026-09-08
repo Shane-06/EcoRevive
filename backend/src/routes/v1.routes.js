@@ -6,6 +6,7 @@ const environmentRoutes = require('./environment.routes');
 const speciesRoutes = require('./species.routes');
 const suitabilityRoutes = require('./suitability.routes');
 const adminRoutes = require('./admin.routes');
+const publicRoutes = require('./public.routes');
 
 const router = Router();
 
@@ -50,5 +51,11 @@ router.use('/suitability', suitabilityRoutes);
  * @route /api/v1/admin
  */
 router.use('/admin', adminRoutes);
+
+/**
+ * Public tree profile & QR routes under API v1
+ * @route /api/v1/public
+ */
+router.use('/public', publicRoutes);
 
 module.exports = router;

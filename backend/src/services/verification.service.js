@@ -1,4 +1,5 @@
 const verificationRepository = require('../repositories/verification.repository');
+const identityRepository = require('../repositories/identity.repository');
 const { withTransaction } = require('../config/db');
 const {
   BadRequestError,
@@ -172,10 +173,14 @@ class VerificationService {
         );
       }
 
+      // Generate next sequential unique Tree ID if not already assigned
+      const newTreeId = tree.tree_id || (await identityRepository.getNextTreeId(client));
+
       const updatedTree = await verificationRepository.updateTreeStatus(
         client,
         tree.id,
-        'Verified'
+        'Verified',
+        newTreeId
       );
 
       await verificationRepository.createVerificationAudit(client, {
@@ -188,9 +193,12 @@ class VerificationService {
       return {
         tree: {
           id: updatedTree.id,
-          treeId: updatedTree.tree_id || null,
+          treeId: updatedTree.tree_id,
           species: updatedTree.species,
           status: 'Verified',
+        },
+        identity: {
+          treeId: updatedTree.tree_id,
         },
       };
     });

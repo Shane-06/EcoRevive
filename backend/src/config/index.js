@@ -8,6 +8,7 @@ const config = {
   isProduction: process.env.NODE_ENV === 'production',
   isTest: process.env.NODE_ENV === 'test',
   port: parseInt(process.env.PORT || '5000', 10),
+  appUrl: process.env.APP_URL || process.env.PUBLIC_URL || 'http://localhost:5173',
   cors: {
     origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
     credentials: true,

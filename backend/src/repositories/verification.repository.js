@@ -119,33 +119,63 @@ class VerificationRepository {
   }
 
   /**
-   * Updates a tree's status within a transaction.
+   * Updates a tree's status (and optionally tree_id) within a transaction.
    * @param {import('pg').PoolClient} client - Transactional database client
    * @param {string} treeId - Tree UUID
    * @param {string} status - New status ('Under Review', 'Verified', 'Rejected')
+   * @param {string|null} [treeIdValue] - Optional Tree ID (e.g. 'ER-PLT-00001')
    * @returns {Promise<object>} Updated tree row
    */
-  async updateTreeStatus(client, treeId, status) {
-    const sql = `
-      UPDATE trees
-      SET
-        status = $1,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = $2
-      RETURNING
-        id,
-        tree_id,
-        species,
-        ST_Y(location) AS latitude,
-        ST_X(location) AS longitude,
-        photo_reference,
-        status,
-        planted_on::text AS planted_on,
-        contributor_id,
-        created_at,
-        updated_at;
-    `;
-    const res = await client.query(sql, [status, treeId]);
+  async updateTreeStatus(client, treeId, status, treeIdValue = undefined) {
+    let sql;
+    let params;
+
+    if (treeIdValue !== undefined) {
+      sql = `
+        UPDATE trees
+        SET
+          status = $1,
+          tree_id = $2,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = $3
+        RETURNING
+          id,
+          tree_id,
+          species,
+          ST_Y(location) AS latitude,
+          ST_X(location) AS longitude,
+          photo_reference,
+          status,
+          planted_on::text AS planted_on,
+          contributor_id,
+          created_at,
+          updated_at;
+      `;
+      params = [status, treeIdValue, treeId];
+    } else {
+      sql = `
+        UPDATE trees
+        SET
+          status = $1,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2
+        RETURNING
+          id,
+          tree_id,
+          species,
+          ST_Y(location) AS latitude,
+          ST_X(location) AS longitude,
+          photo_reference,
+          status,
+          planted_on::text AS planted_on,
+          contributor_id,
+          created_at,
+          updated_at;
+      `;
+      params = [status, treeId];
+    }
+
+    const res = await client.query(sql, params);
     return res.rows[0];
   }
 

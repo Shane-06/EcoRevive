@@ -90,7 +90,7 @@ describe('Milestone 9 — Manual Verification Workflow Integration Tests', () =>
       const tree = await createTestTree('Pending');
 
       const res = await request(app)
-        .get('/api/v1/admin/verifications?page=1&pageSize=10')
+        .get('/api/v1/admin/verifications?page=1&pageSize=100')
         .set('Authorization', `Bearer ${adminToken}`);
 
       expect(res.status).toBe(200);
@@ -98,7 +98,7 @@ describe('Milestone 9 — Manual Verification Workflow Integration Tests', () =>
       expect(Array.isArray(res.body.data.trees)).toBe(true);
       expect(res.body.data.pagination).toBeDefined();
       expect(res.body.data.pagination.page).toBe(1);
-      expect(res.body.data.pagination.pageSize).toBe(10);
+      expect(res.body.data.pagination.pageSize).toBe(100);
       expect(res.body.data.pagination.total).toBeGreaterThanOrEqual(1);
 
       const found = res.body.data.trees.find((t) => t.id === tree.id);
@@ -289,8 +289,9 @@ describe('Milestone 9 — Manual Verification Workflow Integration Tests', () =>
       // Verify database updated
       const dbTree = await treeRepository.findById(tree.id);
       expect(dbTree.status).toBe('Verified');
-      // M9 boundary: tree_id remains null (not generated until M10)
-      expect(dbTree.tree_id).toBeNull();
+      // M10: permanent Tree ID is generated and assigned upon verification approval
+      expect(dbTree.tree_id).toMatch(/^ER-PLT-\d{5}$/);
+      expect(res.body.data.identity.treeId).toBe(dbTree.tree_id);
 
       // Verify audit record created
       const auditRes = await query(
