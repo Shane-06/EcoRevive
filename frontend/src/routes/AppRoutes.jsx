@@ -11,9 +11,9 @@ import LoginPage from '../pages/LoginPage';
 import RegisterPage from '../pages/RegisterPage';
 import UnauthorizedPage from '../pages/UnauthorizedPage';
 import NotFoundPage from '../pages/NotFoundPage';
+import MapPage from '../pages/MapPage';
 
 // Placeholders for future milestone features
-import MapPage from '../pages/placeholders/MapPage';
 import TreesPage from '../pages/placeholders/TreesPage';
 import MonitorPage from '../pages/placeholders/MonitorPage';
 import DashboardPage from '../pages/placeholders/DashboardPage';

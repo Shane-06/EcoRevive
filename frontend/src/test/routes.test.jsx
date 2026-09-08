@@ -29,7 +29,7 @@ describe('Frontend Foundation — Route Guards & Navigation Tests', () => {
 
   it('should render the public Map page on /map', () => {
     renderWithRouter('/map');
-    expect(screen.getByText(/Interactive Plantation Map/i)).toBeInTheDocument();
+    expect(screen.getByText(/Environmental Map & Information/i)).toBeInTheDocument();
   });
 
   it('should block unauthenticated access to /dashboard and redirect to /login', () => {
