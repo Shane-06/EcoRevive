@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const treeController = require('../controllers/tree.controller');
+const treeHealthController = require('../controllers/treeHealth.controller');
 const authenticate = require('../middleware/auth.middleware');
 const { requireRole } = require('../middleware/rbac.middleware');
 const { optionalPhotoUpload } = require('../middleware/upload.middleware');
@@ -51,5 +52,25 @@ router.get('/nearby', treeController.getNearbyTrees.bind(treeController));
  * @access Public
  */
 router.get('/:treeId/location', treeController.getTreeLocation.bind(treeController));
+
+/**
+ * @route POST /api/v1/trees/:treeId/health-logs
+ * @desc Submit a new health observation log for a Verified tree
+ * @access Private (Caretaker)
+ */
+router.post(
+  '/:treeId/health-logs',
+  authenticate,
+  requireRole('caretaker'),
+  optionalPhotoUpload,
+  treeHealthController.createHealthLog.bind(treeHealthController)
+);
+
+/**
+ * @route GET /api/v1/trees/:treeId/health-logs
+ * @desc Retrieve chronological health history for a Verified tree
+ * @access Public
+ */
+router.get('/:treeId/health-logs', treeHealthController.getHealthHistory.bind(treeHealthController));
 
 module.exports = router;

@@ -1,4 +1,5 @@
 const identityRepository = require('../repositories/identity.repository');
+const treeHealthRepository = require('../repositories/treeHealth.repository');
 const { withTransaction } = require('../config/db');
 const { generateTreeQrPayload } = require('../utils/qr');
 const {
@@ -101,6 +102,20 @@ class IdentityService {
       plantedOnStr = row.planted_on.split('T')[0];
     }
 
+    const [latestHealth, healthHistoryRows] = await Promise.all([
+      treeHealthRepository.findLatestHealthLog(row.id),
+      treeHealthRepository.findPublicHealthHistory(row.id, 20),
+    ]);
+
+    const currentHealth = latestHealth ? latestHealth.health_status : null;
+    const healthHistory = healthHistoryRows.map((h) => ({
+      id: h.id,
+      healthStatus: h.health_status,
+      recordedAt: h.recorded_at,
+      notes: h.notes || null,
+      photoReference: h.photo_reference || null,
+    }));
+
     return {
       tree: {
         treeId: row.tree_id || null,
@@ -112,8 +127,8 @@ class IdentityService {
         contributor: {
           displayName: row.contributor_display_name || 'Anonymous',
         },
-        currentHealth: null,
-        healthHistory: [],
+        currentHealth,
+        healthHistory,
       },
     };
   }
