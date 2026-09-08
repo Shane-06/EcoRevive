@@ -12,9 +12,11 @@ import RegisterPage from '../pages/RegisterPage';
 import UnauthorizedPage from '../pages/UnauthorizedPage';
 import NotFoundPage from '../pages/NotFoundPage';
 import MapPage from '../pages/MapPage';
+import PlantationPage from '../pages/PlantationPage';
+import AdminVerificationsPage from '../pages/AdminVerificationsPage';
+import PublicTreeProfilePage from '../pages/PublicTreeProfilePage';
 
 // Placeholders for future milestone features
-import TreesPage from '../pages/placeholders/TreesPage';
 import MonitorPage from '../pages/placeholders/MonitorPage';
 import DashboardPage from '../pages/placeholders/DashboardPage';
 import AdminPage from '../pages/placeholders/AdminPage';
@@ -33,6 +35,7 @@ export default function AppRoutes() {
         {/* Public Routes */}
         <Route path="/" element={<HomePage />} />
         <Route path="/map" element={<MapPage />} />
+        <Route path="/tree/:treeId" element={<PublicTreeProfilePage />} />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
         {/* Authenticated Contributor Routes */}
@@ -43,7 +46,7 @@ export default function AppRoutes() {
             </ProtectedRoute>
           }
         >
-          <Route path="/trees" element={<TreesPage />} />
+          <Route path="/trees" element={<PlantationPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
         </Route>
 
@@ -66,8 +69,8 @@ export default function AppRoutes() {
             </ProtectedRoute>
           }
         >
-          <Route path="/admin" element={<AdminPage />} />
-          <Route path="/admin/verifications" element={<AdminPage />} />
+          <Route path="/admin" element={<AdminVerificationsPage />} />
+          <Route path="/admin/verifications" element={<AdminVerificationsPage />} />
           <Route path="/admin/dashboard" element={<AdminPage />} />
         </Route>
 

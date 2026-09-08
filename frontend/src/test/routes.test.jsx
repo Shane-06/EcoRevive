@@ -63,8 +63,8 @@ describe('Frontend Foundation — Route Guards & Navigation Tests', () => {
     expect(screen.getByText(/Access Restricted/i)).toBeInTheDocument();
   });
 
-  it('should allow authenticated admin to access /admin', () => {
-    storage.setItem(STORAGE_KEYS.TOKEN, 'mock-jwt-admin-token');
+  it('should allow authenticated admin to access /admin', async () => {
+    storage.setItem(STORAGE_KEYS.TOKEN, 'mock-jwt-token');
     storage.setItem(STORAGE_KEYS.USER, {
       id: 'a1',
       name: 'Test Admin',
@@ -73,7 +73,7 @@ describe('Frontend Foundation — Route Guards & Navigation Tests', () => {
     });
 
     renderWithRouter('/admin');
-    expect(screen.getByText(/Coordinator Verification & Administration/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Coordinator Verification Hub/i)).toBeInTheDocument();
   });
 
   it('should render 404 Not Found component on unknown routes', () => {
