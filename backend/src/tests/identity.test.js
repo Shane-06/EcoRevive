@@ -40,6 +40,9 @@ describe('Milestone 10 — Tree ID, QR & Public Tree Profile Integration Tests',
       await query('DELETE FROM trees WHERE id = ANY($1::uuid[]);', [createdTreeIds]);
     }
     if (createdUserIds.length > 0) {
+      await query('DELETE FROM rewards WHERE user_id = ANY($1::uuid[]);', [createdUserIds]);
+      await query('DELETE FROM verifications WHERE reviewer_id = ANY($1::uuid[]);', [createdUserIds]);
+      await query('DELETE FROM trees WHERE contributor_id = ANY($1::uuid[]);', [createdUserIds]);
       await query('DELETE FROM users WHERE id = ANY($1::uuid[]);', [createdUserIds]);
     }
     await closePool();

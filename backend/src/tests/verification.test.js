@@ -44,12 +44,13 @@ describe('Milestone 9 — Manual Verification Workflow Integration Tests', () =>
   });
 
   afterAll(async () => {
-    // Clean up created verifications, trees, and users
+    // Clean up created verifications, trees, rewards, and users
     if (createdTreeIds.length > 0) {
       await query('DELETE FROM verifications WHERE tree_id = ANY($1::uuid[]);', [createdTreeIds]);
       await query('DELETE FROM trees WHERE id = ANY($1::uuid[]);', [createdTreeIds]);
     }
     if (createdUserIds.length > 0) {
+      await query('DELETE FROM rewards WHERE user_id = ANY($1::uuid[]);', [createdUserIds]);
       await query('DELETE FROM users WHERE id = ANY($1::uuid[]);', [createdUserIds]);
     }
     await closePool();

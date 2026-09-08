@@ -2,8 +2,21 @@ const { Router } = require('express');
 const authenticate = require('../middleware/auth.middleware');
 const { requireRole } = require('../middleware/rbac.middleware');
 const verificationController = require('../controllers/verification.controller');
+const dashboardController = require('../controllers/dashboard.controller');
 
 const router = Router();
+
+/**
+ * @route GET /api/v1/admin/dashboard
+ * @desc Retrieve system-wide aggregate dashboard metrics
+ * @access Protected (Admin only)
+ */
+router.get(
+  '/dashboard',
+  authenticate,
+  requireRole('admin'),
+  dashboardController.getAdminDashboard.bind(dashboardController)
+);
 
 /**
  * Admin Verification Routes

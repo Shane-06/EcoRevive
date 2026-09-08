@@ -7,6 +7,8 @@ const speciesRoutes = require('./species.routes');
 const suitabilityRoutes = require('./suitability.routes');
 const adminRoutes = require('./admin.routes');
 const publicRoutes = require('./public.routes');
+const rewardRoutes = require('./reward.routes');
+const dashboardRoutes = require('./dashboard.routes');
 
 const router = Router();
 
@@ -57,5 +59,17 @@ router.use('/admin', adminRoutes);
  * @route /api/v1/public
  */
 router.use('/public', publicRoutes);
+
+/**
+ * Reward routes under API v1
+ * @route /api/v1/rewards
+ */
+router.use('/rewards', rewardRoutes);
+
+/**
+ * Dashboard routes under API v1
+ * @route /api/v1/dashboard
+ */
+router.use('/dashboard', dashboardRoutes);
 
 module.exports = router;

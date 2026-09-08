@@ -1,5 +1,6 @@
 const verificationRepository = require('../repositories/verification.repository');
 const identityRepository = require('../repositories/identity.repository');
+const rewardRepository = require('../repositories/reward.repository');
 const { withTransaction } = require('../config/db');
 const {
   BadRequestError,
@@ -189,6 +190,15 @@ class VerificationService {
         decision: 'VERIFIED',
         reason: null,
       });
+
+      // Award 50 points to the submitting contributor atomically upon verification approval
+      if (tree.contributor_id) {
+        await rewardRepository.createReward(client, {
+          userId: tree.contributor_id,
+          points: 50,
+          activity: 'Verified plantation',
+        });
+      }
 
       return {
         tree: {
