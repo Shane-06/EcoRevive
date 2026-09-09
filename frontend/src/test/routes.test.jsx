@@ -37,7 +37,7 @@ describe('Frontend Foundation — Route Guards & Navigation Tests', () => {
     expect(screen.getByText(/Sign In to EcoRevive/i)).toBeInTheDocument();
   });
 
-  it('should allow authenticated contributor to access /dashboard', () => {
+  it('should allow authenticated contributor to access /dashboard', async () => {
     storage.setItem(STORAGE_KEYS.TOKEN, 'mock-jwt-token');
     storage.setItem(STORAGE_KEYS.USER, {
       id: 'c1',
@@ -47,7 +47,7 @@ describe('Frontend Foundation — Route Guards & Navigation Tests', () => {
     });
 
     renderWithRouter('/dashboard');
-    expect(screen.getByText(/Contributor Dashboard/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Contributor Workspace/i)).toBeInTheDocument();
   });
 
   it('should redirect contributor attempting to access /admin to /unauthorized', () => {

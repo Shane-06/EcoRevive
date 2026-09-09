@@ -13,6 +13,20 @@ export const STORAGE_KEYS = {
   USER: 'ecorevive_user',
 };
 
+export const FROZEN_HEALTH_STATUSES = [
+  'Healthy',
+  'Good',
+  'Needs Attention',
+  'Dead',
+];
+
+export const PLANTATION_STATUSES = [
+  'Pending',
+  'Under Review',
+  'Verified',
+  'Rejected',
+];
+
 export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: '/auth/login',

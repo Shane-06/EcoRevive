@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { ROLES } from '../../utils/constants';
-import { Sprout, Menu, X, LogOut, User, Shield, Trees, MapPin, QrCode } from 'lucide-react';
+import { Sprout, Menu, X, LogOut, User, Shield, Trees, MapPin, QrCode, Award, LayoutDashboard } from 'lucide-react';
 
 export default function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -93,7 +93,14 @@ export default function Navbar() {
                       </span>
                     </NavLink>
                     <NavLink to="/dashboard" className={navLinkClass}>
-                      Dashboard
+                      <span className="flex items-center gap-1.5">
+                        <LayoutDashboard className="w-4 h-4" /> Dashboard
+                      </span>
+                    </NavLink>
+                    <NavLink to="/rewards" className={navLinkClass}>
+                      <span className="flex items-center gap-1.5">
+                        <Award className="w-4 h-4" /> Rewards
+                      </span>
                     </NavLink>
                   </>
                 )}
@@ -114,7 +121,9 @@ export default function Navbar() {
                       </span>
                     </NavLink>
                     <NavLink to="/admin/dashboard" className={navLinkClass}>
-                      Admin Dashboard
+                      <span className="flex items-center gap-1.5">
+                        <LayoutDashboard className="w-4 h-4" /> Admin Dashboard
+                      </span>
                     </NavLink>
                   </>
                 )}
@@ -188,7 +197,10 @@ export default function Navbar() {
                     <Trees className="w-4 h-4" /> My Plantations
                   </NavLink>
                   <NavLink to="/dashboard" className={mobileNavLinkClass} onClick={() => setMobileMenuOpen(false)}>
-                    Dashboard
+                    <LayoutDashboard className="w-4 h-4" /> Dashboard
+                  </NavLink>
+                  <NavLink to="/rewards" className={mobileNavLinkClass} onClick={() => setMobileMenuOpen(false)}>
+                    <Award className="w-4 h-4" /> Rewards
                   </NavLink>
                 </>
               )}
@@ -205,7 +217,7 @@ export default function Navbar() {
                     <Shield className="w-4 h-4" /> Verifications
                   </NavLink>
                   <NavLink to="/admin/dashboard" className={mobileNavLinkClass} onClick={() => setMobileMenuOpen(false)}>
-                    Admin Dashboard
+                    <LayoutDashboard className="w-4 h-4" /> Admin Dashboard
                   </NavLink>
                 </>
               )}

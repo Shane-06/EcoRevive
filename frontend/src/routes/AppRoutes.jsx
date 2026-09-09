@@ -5,21 +5,26 @@ import ProtectedRoute from './ProtectedRoute';
 import RoleRoute from './RoleRoute';
 import { ROLES } from '../utils/constants';
 
-// Pages
+// Public & Common Pages
 import HomePage from '../pages/HomePage';
 import LoginPage from '../pages/LoginPage';
 import RegisterPage from '../pages/RegisterPage';
 import UnauthorizedPage from '../pages/UnauthorizedPage';
 import NotFoundPage from '../pages/NotFoundPage';
 import MapPage from '../pages/MapPage';
-import PlantationPage from '../pages/PlantationPage';
-import AdminVerificationsPage from '../pages/AdminVerificationsPage';
 import PublicTreeProfilePage from '../pages/PublicTreeProfilePage';
 
-// Placeholders for future milestone features
-import MonitorPage from '../pages/placeholders/MonitorPage';
-import DashboardPage from '../pages/placeholders/DashboardPage';
-import AdminPage from '../pages/placeholders/AdminPage';
+// Contributor & Authenticated Pages
+import PlantationPage from '../pages/PlantationPage';
+import DashboardPage from '../pages/DashboardPage';
+import RewardsPage from '../pages/RewardsPage';
+
+// Caretaker Pages
+import MonitorPage from '../pages/MonitorPage';
+
+// Admin / Coordinator Pages
+import AdminVerificationsPage from '../pages/AdminVerificationsPage';
+import AdminDashboardPage from '../pages/AdminDashboardPage';
 
 export default function AppRoutes() {
   return (
@@ -38,7 +43,7 @@ export default function AppRoutes() {
         <Route path="/tree/:treeId" element={<PublicTreeProfilePage />} />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
-        {/* Authenticated Contributor Routes */}
+        {/* Authenticated Routes (Contributor & Admin) */}
         <Route
           element={
             <ProtectedRoute>
@@ -48,6 +53,17 @@ export default function AppRoutes() {
         >
           <Route path="/trees" element={<PlantationPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
+        </Route>
+
+        {/* Authenticated Rewards Route (All Authenticated Users) */}
+        <Route
+          element={
+            <ProtectedRoute>
+              <RoleRoute allowedRoles={[ROLES.CONTRIBUTOR, ROLES.CARETAKER, ROLES.ADMIN]} />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/rewards" element={<RewardsPage />} />
         </Route>
 
         {/* Authenticated Caretaker Routes */}
@@ -71,7 +87,7 @@ export default function AppRoutes() {
         >
           <Route path="/admin" element={<AdminVerificationsPage />} />
           <Route path="/admin/verifications" element={<AdminVerificationsPage />} />
-          <Route path="/admin/dashboard" element={<AdminPage />} />
+          <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
         </Route>
 
         {/* 404 Catch-All Route */}
