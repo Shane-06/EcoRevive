@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { ROLES } from '../utils/constants';
 import ErrorAlert from '../components/common/ErrorAlert';
 import { UserPlus, Loader2 } from 'lucide-react';
 
@@ -9,7 +8,6 @@ export default function RegisterPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState(ROLES.CONTRIBUTOR);
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -36,14 +34,9 @@ export default function RegisterPage() {
         name: name.trim(),
         email: email.trim(),
         password,
-        role,
       });
 
-      if (role === ROLES.CARETAKER) {
-        navigate('/monitor', { replace: true });
-      } else {
-        navigate('/dashboard', { replace: true });
-      }
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       setError(err.message || 'Registration failed. Please try again.');
     } finally {
@@ -110,18 +103,12 @@ export default function RegisterPage() {
         </div>
 
         <div>
-          <label htmlFor="role" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+          <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
             Platform Role
           </label>
-          <select
-            id="role"
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
-          >
-            <option value={ROLES.CONTRIBUTOR}>Contributor (Register plantations & earn points)</option>
-            <option value={ROLES.CARETAKER}>Caretaker (Scan QR & record tree health logs)</option>
-          </select>
+          <div className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-sm text-slate-300">
+            Contributor <span className="text-xs text-slate-500">(Register plantations & earn points)</span>
+          </div>
         </div>
 
         <button
@@ -150,3 +137,4 @@ export default function RegisterPage() {
     </div>
   );
 }
+
