@@ -9,22 +9,22 @@ import ErrorAlert from '../common/ErrorAlert';
 const STATUS_BADGES = {
   Pending: {
     label: 'Pending Review',
-    badgeClass: 'bg-amber-950/80 border-amber-500/30 text-amber-400',
+    badgeClass: 'bg-[#fef9ed] border-[#f0dda2] text-[#855b11]',
     icon: Clock,
   },
   'Under Review': {
     label: 'Under Review',
-    badgeClass: 'bg-blue-950/80 border-blue-500/30 text-blue-400',
+    badgeClass: 'bg-[#eff6ff] border-[#bfdbfe] text-[#1e40af]',
     icon: Eye,
   },
   Verified: {
     label: 'Verified',
-    badgeClass: 'bg-emerald-950/80 border-emerald-500/30 text-emerald-400',
+    badgeClass: 'bg-[#edf7ee] border-[#b4dbbe] text-[#194c25]',
     icon: CheckCircle2,
   },
   Rejected: {
     label: 'Rejected',
-    badgeClass: 'bg-rose-950/80 border-rose-500/30 text-rose-400',
+    badgeClass: 'bg-[#fdf2f2] border-[#f6c6c6] text-[#992222]',
     icon: AlertOctagon,
   },
 };
@@ -42,7 +42,7 @@ export default function PlantationList({
 }) {
   if (loading) {
     return (
-      <div className="p-12 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col items-center justify-center min-h-[300px]">
+      <div className="p-12 rounded-2xl bg-white border border-warm-400 flex flex-col items-center justify-center min-h-[300px] shadow-card">
         <LoadingSpinner size="lg" message="Loading your registered plantations..." />
       </div>
     );
@@ -50,7 +50,7 @@ export default function PlantationList({
 
   if (error) {
     return (
-      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800">
+      <div className="p-6 rounded-2xl bg-white border border-warm-400 shadow-card">
         <ErrorAlert
           title="Failed to Load Plantations"
           message={error.message || 'Unable to retrieve your plantation history.'}
@@ -62,12 +62,12 @@ export default function PlantationList({
 
   if (!trees || trees.length === 0) {
     return (
-      <div data-testid="empty-plantations-notice" className="p-12 rounded-2xl bg-slate-900/60 border border-slate-800 text-center space-y-3">
-        <div className="w-12 h-12 rounded-xl bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
-          <Trees className="w-6 h-6 text-emerald-400" />
+      <div data-testid="empty-plantations-notice" className="p-12 rounded-2xl bg-white border border-warm-400 text-center space-y-3 shadow-card">
+        <div className="w-12 h-12 rounded-xl bg-warm-200 text-forest-800 flex items-center justify-center mx-auto">
+          <Trees className="w-6 h-6" />
         </div>
-        <h3 className="font-semibold text-slate-200 text-base">No Plantations Registered Yet</h3>
-        <p className="text-xs text-slate-400 max-w-sm mx-auto">
+        <h3 className="font-serif font-bold text-charcoal-900 text-base">No Plantations Registered Yet</h3>
+        <p className="text-xs text-charcoal-600 max-w-sm mx-auto leading-relaxed">
           You haven&apos;t submitted any trees yet. Use the registration form to submit your first planting record!
         </p>
       </div>
@@ -78,9 +78,9 @@ export default function PlantationList({
     <div data-testid="plantation-list-container" className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Trees className="w-5 h-5 text-emerald-400" />
-          <h2 className="font-bold text-white text-base">My Registered Plantations</h2>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">
+          <Trees className="w-5 h-5 text-forest-700" />
+          <h2 className="font-serif font-bold text-charcoal-900 text-base">My Registered Plantations</h2>
+          <span className="text-xs px-2.5 py-0.5 rounded-full bg-warm-200 border border-warm-300 text-charcoal-700 font-mono">
             {pagination?.total ?? trees.length}
           </span>
         </div>
@@ -88,7 +88,7 @@ export default function PlantationList({
           <button
             type="button"
             onClick={onRefresh}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-charcoal-500 hover:text-charcoal-900 hover:bg-warm-200 transition-colors"
             title="Refresh History"
           >
             <RefreshCw className="w-4 h-4" />
@@ -105,22 +105,22 @@ export default function PlantationList({
             <div
               key={tree.id}
               data-testid={`plantation-item-${tree.id}`}
-              className="p-5 rounded-2xl bg-slate-900 border border-slate-800/90 shadow-md hover:border-slate-700 transition-all space-y-3"
+              className="p-5 sm:p-6 rounded-2xl bg-white border border-warm-400 shadow-card hover:border-forest-300 transition-all space-y-3.5"
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-white text-base">{tree.species}</h3>
+                  <div className="flex items-center gap-2.5">
+                    <h3 className="font-serif font-bold text-charcoal-900 text-base">{tree.species}</h3>
                     {tree.treeId && (
                       <span
                         data-testid={`authoritative-tree-id-${tree.id}`}
-                        className="px-2.5 py-0.5 rounded-lg bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-mono text-xs font-bold"
+                        className="px-2.5 py-0.5 rounded-md bg-forest-50 border border-forest-200 text-forest-800 font-mono text-xs font-bold"
                       >
                         {tree.treeId}
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] font-mono text-slate-500">Record ID: {tree.id}</p>
+                  <p className="text-[11px] font-mono text-charcoal-500">Record ID: {tree.id}</p>
                 </div>
 
                 <span
@@ -134,27 +134,27 @@ export default function PlantationList({
 
               {/* Attributes Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
-                <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-0.5">
-                  <div className="text-[11px] text-slate-400 flex items-center gap-1">
-                    <Calendar className="w-3 h-3 text-slate-400" />
+                <div className="p-3 rounded-xl bg-warm-50 border border-warm-300 space-y-0.5">
+                  <div className="text-[11px] text-charcoal-500 flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-charcoal-400" />
                     <span>Planted On</span>
                   </div>
-                  <div className="font-semibold text-slate-200">{tree.plantedOn}</div>
+                  <div className="font-semibold text-charcoal-800 font-mono">{tree.plantedOn}</div>
                 </div>
 
-                <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-0.5">
-                  <div className="text-[11px] text-slate-400 flex items-center gap-1">
-                    <MapPin className="w-3 h-3 text-blue-400" />
+                <div className="p-3 rounded-xl bg-warm-50 border border-warm-300 space-y-0.5">
+                  <div className="text-[11px] text-charcoal-500 flex items-center gap-1">
+                    <MapPin className="w-3 h-3 text-slate-700" />
                     <span>Location</span>
                   </div>
-                  <div className="font-mono text-slate-300 text-[11px]">
+                  <div className="font-mono text-charcoal-800 text-[11px]">
                     {tree.latitude?.toFixed(4)}, {tree.longitude?.toFixed(4)}
                   </div>
                 </div>
 
-                <div className="col-span-2 sm:col-span-1 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-0.5">
-                  <div className="text-[11px] text-slate-400">Submission Date</div>
-                  <div className="font-mono text-slate-300 text-[11px]">
+                <div className="col-span-2 sm:col-span-1 p-3 rounded-xl bg-warm-50 border border-warm-300 space-y-0.5">
+                  <div className="text-[11px] text-charcoal-500">Submission Date</div>
+                  <div className="font-mono text-charcoal-800 text-[11px]">
                     {tree.createdAt ? new Date(tree.createdAt).toLocaleDateString() : 'N/A'}
                   </div>
                 </div>
@@ -164,13 +164,13 @@ export default function PlantationList({
               {tree.status === 'Rejected' && (
                 <div
                   data-testid="rejection-reason-box"
-                  className="p-3 rounded-xl bg-rose-950/40 border border-rose-500/30 text-xs text-rose-300 space-y-1"
+                  className="p-3.5 rounded-xl bg-[#fdf2f2] border border-[#f6c6c6] text-xs text-[#8c1d1d] space-y-1"
                 >
-                  <div className="font-bold flex items-center gap-1.5">
-                    <AlertOctagon className="w-3.5 h-3.5 text-rose-400" />
+                  <div className="font-bold flex items-center gap-1.5 text-[#992222]">
+                    <AlertOctagon className="w-3.5 h-3.5 text-[#b91c1c]" />
                     <span>Rejection Reason from Coordinator:</span>
                   </div>
-                  <p className="text-rose-200/90 pl-5 text-[11px] leading-relaxed">
+                  <p className="text-[#7f1d1d] pl-5 text-[11px] leading-relaxed">
                     {tree.rejectionReason || tree.reason || 'Verification was not approved. Review photo clarity and species guidelines.'}
                   </p>
                 </div>
@@ -178,13 +178,13 @@ export default function PlantationList({
 
               {/* Verified Tree Actions: Public Profile & QR */}
               {tree.status === 'Verified' && tree.treeId && (
-                <div className="pt-2 border-t border-slate-800 flex items-center justify-end gap-2">
+                <div className="pt-2 border-t border-warm-300 flex items-center justify-end gap-2">
                   <Link
                     to={`/tree/${encodeURIComponent(tree.treeId)}`}
                     data-testid={`view-public-profile-btn-${tree.id}`}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-forest-900 hover:bg-forest-800 text-white text-xs font-semibold shadow-subtle transition-colors"
                   >
-                    <QrCode className="w-3.5 h-3.5" />
+                    <QrCode className="w-3.5 h-3.5 text-forest-200" />
                     <span>View Public Profile & QR</span>
                   </Link>
                 </div>
@@ -196,16 +196,16 @@ export default function PlantationList({
 
       {/* Pagination Controls */}
       {pagination && pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-400">
+        <div className="flex items-center justify-between p-3.5 rounded-xl bg-white border border-warm-400 text-xs text-charcoal-600 shadow-subtle">
           <span>
-            Page <strong className="text-white">{pagination.page}</strong> of <strong className="text-white">{pagination.totalPages}</strong>
+            Page <strong className="text-charcoal-900">{pagination.page}</strong> of <strong className="text-charcoal-900">{pagination.totalPages}</strong>
           </span>
           <div className="flex items-center gap-1">
             <button
               type="button"
               disabled={pagination.page <= 1}
               onClick={() => onPageChange && onPageChange(pagination.page - 1)}
-              className="p-1.5 rounded-lg bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-1.5 rounded-lg bg-warm-100 border border-warm-300 text-charcoal-700 hover:bg-warm-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               title="Previous Page"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -214,7 +214,7 @@ export default function PlantationList({
               type="button"
               disabled={pagination.page >= pagination.totalPages}
               onClick={() => onPageChange && onPageChange(pagination.page + 1)}
-              className="p-1.5 rounded-lg bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-1.5 rounded-lg bg-warm-100 border border-warm-300 text-charcoal-700 hover:bg-warm-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               title="Next Page"
             >
               <ChevronRight className="w-4 h-4" />

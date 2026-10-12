@@ -123,7 +123,7 @@ export default function MapPage() {
       });
       setTrees(data?.trees || []);
     } catch {
-      // In case of error (e.g. invalid bounds or network), silently retain or clear
+      // Retain viewport trees silently on transient errors
     }
   }, []);
 
@@ -191,16 +191,18 @@ export default function MapPage() {
   return (
     <div className="space-y-5">
       {/* Top Header & Search Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-md">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 sm:p-6 rounded-2xl bg-white border border-warm-400 shadow-card">
         <div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-forest-50 border border-forest-200 text-forest-800 flex items-center justify-center">
               <MapPin className="w-4 h-4" />
             </div>
-            <h1 className="text-xl font-bold text-white">Environmental Map & Information</h1>
+            <h1 className="text-xl font-bold font-serif text-charcoal-900 tracking-tight">
+              Environmental Map & Information
+            </h1>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Explore verified plantations, inspect atmospheric & soil metrics, and evaluate species suitability.
+          <p className="text-xs text-charcoal-600 mt-1 max-w-xl">
+            Explore verified tree specimens, inspect atmospheric weather and ISRIC soil properties, and evaluate deterministic species suitability.
           </p>
         </div>
 
@@ -212,28 +214,28 @@ export default function MapPage() {
               placeholder="Lat (e.g. 30.65)"
               value={inputLat}
               onChange={(e) => setInputLat(e.target.value)}
-              className="w-24 sm:w-28 px-2.5 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="w-24 sm:w-28 px-3 py-1.5 rounded-xl bg-warm-50 border border-warm-400 text-xs text-charcoal-900 font-mono focus:outline-none focus:border-forest-700"
             />
             <input
               type="text"
               placeholder="Lng (e.g. 76.78)"
               value={inputLng}
               onChange={(e) => setInputLng(e.target.value)}
-              className="w-24 sm:w-28 px-2.5 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="w-24 sm:w-28 px-3 py-1.5 rounded-xl bg-warm-50 border border-warm-400 text-xs text-charcoal-900 font-mono focus:outline-none focus:border-forest-700"
             />
           </div>
           <button
             type="submit"
-            className="py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+            className="py-1.5 px-3.5 rounded-xl bg-forest-900 hover:bg-forest-800 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-subtle"
           >
-            <Search className="w-3.5 h-3.5" />
+            <Search className="w-3.5 h-3.5 text-forest-200" />
             <span>Assess</span>
           </button>
           <button
             type="button"
             onClick={() => handleSelectLocation(DEFAULT_CENTER)}
             title="Reset to Chandigarh Baseline"
-            className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+            className="p-1.5 rounded-xl bg-warm-200 hover:bg-warm-300 text-charcoal-700 border border-warm-300 transition-colors"
           >
             <LocateFixed className="w-4 h-4" />
           </button>
@@ -241,16 +243,16 @@ export default function MapPage() {
       </div>
 
       {coordError && (
-        <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+        <div className="p-3 rounded-xl bg-[#fdf2f2] border border-[#f5c6c6] text-[#7a1f1f] text-xs flex items-center gap-2 shadow-subtle">
           <span className="font-semibold">Input Error:</span> {coordError}
         </div>
       )}
 
       {/* Main Grid: Map (Left) + Information Panels (Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* Map View Column */}
         <div className="lg:col-span-7 flex flex-col space-y-4">
-          <div className="h-[450px] lg:h-[620px] w-full">
+          <div className="h-[460px] lg:h-[640px] w-full rounded-2xl overflow-hidden border border-warm-400 shadow-card bg-warm-200">
             <MapView
               trees={trees}
               selectedLocation={selectedLocation}
@@ -276,14 +278,14 @@ export default function MapPage() {
         {/* Information & Analysis Column */}
         <div className="lg:col-span-5 flex flex-col space-y-4">
           {/* Navigation Tabs */}
-          <div className="flex rounded-xl bg-slate-900 border border-slate-800 p-1">
+          <div className="flex rounded-xl bg-warm-200/90 border border-warm-300 p-1 shadow-subtle">
             <button
               type="button"
               onClick={() => setActiveTab('environment')}
               className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                 activeTab === 'environment'
-                  ? 'bg-emerald-600 text-white shadow'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-white text-forest-900 shadow-subtle'
+                  : 'text-charcoal-600 hover:text-charcoal-900'
               }`}
             >
               <Cloud className="w-3.5 h-3.5" />
@@ -294,8 +296,8 @@ export default function MapPage() {
               onClick={() => setActiveTab('suitability')}
               className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                 activeTab === 'suitability'
-                  ? 'bg-emerald-600 text-white shadow'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-white text-forest-900 shadow-subtle'
+                  : 'text-charcoal-600 hover:text-charcoal-900'
               }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
@@ -306,8 +308,8 @@ export default function MapPage() {
               onClick={() => setActiveTab('species')}
               className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                 activeTab === 'species'
-                  ? 'bg-emerald-600 text-white shadow'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-white text-forest-900 shadow-subtle'
+                  : 'text-charcoal-600 hover:text-charcoal-900'
               }`}
             >
               <TreePine className="w-3.5 h-3.5" />
@@ -328,7 +330,6 @@ export default function MapPage() {
 
             {activeTab === 'suitability' && (
               <div className="space-y-4">
-                {/* Species Selector Mini Header */}
                 <SpeciesSelector
                   speciesList={speciesList}
                   selectedSpecies={selectedSpecies}
@@ -358,19 +359,19 @@ export default function MapPage() {
                   onRetry={loadSpeciesCatalog}
                 />
 
-                <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
-                  <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                <div className="p-5 rounded-2xl bg-white border border-warm-400 space-y-3 shadow-card">
+                  <h4 className="text-xs font-bold text-charcoal-900 uppercase tracking-wider">
                     Species Catalog Overview
                   </h4>
-                  <p className="text-xs text-slate-300 leading-relaxed">
+                  <p className="text-xs text-charcoal-600 leading-relaxed">
                     EcoRevive supports 10 canonical native tree species defined in the project baseline. Biological parameters (soil type, minimum spacing, sunlight, water requirements) are authoritatively managed in PostgreSQL rules and evaluated deterministically.
                   </p>
                   <button
                     type="button"
                     onClick={() => setActiveTab('suitability')}
-                    className="w-full py-2 px-3 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center justify-center gap-2 transition-colors"
+                    className="w-full py-2.5 px-3 rounded-xl bg-forest-50 hover:bg-forest-100 border border-forest-300 text-forest-900 text-xs font-semibold flex items-center justify-center gap-2 transition-colors"
                   >
-                    <Navigation className="w-3.5 h-3.5" />
+                    <Navigation className="w-3.5 h-3.5 text-forest-700" />
                     <span>Run Suitability for {selectedSpecies}</span>
                   </button>
                 </div>

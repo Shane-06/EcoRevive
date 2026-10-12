@@ -85,25 +85,25 @@ export default function VerificationModal({ tree, onClose, onStatusUpdated }) {
   return (
     <div
       data-testid="verification-modal"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal-900/60 backdrop-blur-sm animate-in fade-in duration-200"
     >
-      <div className="relative w-full max-w-2xl rounded-3xl bg-slate-900 border border-slate-700 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+      <div className="relative w-full max-w-2xl rounded-3xl bg-white border border-warm-400 shadow-modal overflow-hidden max-h-[90vh] flex flex-col">
         {/* Modal Header */}
-        <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-900/90">
+        <div className="flex items-center justify-between p-5 sm:p-6 border-b border-warm-300 bg-white">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-300 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-purple-50 border border-purple-200 text-purple-800 flex items-center justify-center">
               <Shield className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-white text-base">Verification Inspection</h3>
-              <p className="text-[11px] font-mono text-slate-400">UUID: {currentTree.id}</p>
+              <h3 className="font-serif font-bold text-charcoal-900 text-base">Verification Inspection</h3>
+              <p className="text-[11px] font-mono text-charcoal-500">UUID: {currentTree.id}</p>
             </div>
           </div>
           <button
             type="button"
             data-testid="close-modal-btn"
             onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-xl text-charcoal-500 hover:text-charcoal-900 hover:bg-warm-200 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -120,55 +120,55 @@ export default function VerificationModal({ tree, onClose, onStatusUpdated }) {
 
           {/* Plantation Details Summary */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-            <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
-              <span className="text-slate-400">Species</span>
-              <div className="font-bold text-white text-sm">{currentTree.species}</div>
+            <div className="p-3.5 rounded-xl bg-warm-50 border border-warm-300 space-y-1">
+              <span className="text-charcoal-500">Species</span>
+              <div className="font-serif font-bold text-charcoal-900 text-sm">{currentTree.species}</div>
             </div>
 
-            <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
-              <span className="text-slate-400">Status</span>
-              <div className="font-bold text-emerald-400 text-sm flex items-center gap-1.5">
-                {currentTree.status === 'Verified' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
-                {currentTree.status === 'Under Review' && <Eye className="w-4 h-4 text-blue-400" />}
-                {currentTree.status === 'Pending' && <Clock className="w-4 h-4 text-amber-400" />}
-                {currentTree.status === 'Rejected' && <AlertOctagon className="w-4 h-4 text-rose-400" />}
-                <span>{currentTree.status}</span>
+            <div className="p-3.5 rounded-xl bg-warm-50 border border-warm-300 space-y-1">
+              <span className="text-charcoal-500">Status</span>
+              <div className="font-bold text-sm flex items-center gap-1.5">
+                {currentTree.status === 'Verified' && <CheckCircle2 className="w-4 h-4 text-forest-700" />}
+                {currentTree.status === 'Under Review' && <Eye className="w-4 h-4 text-blue-700" />}
+                {currentTree.status === 'Pending' && <Clock className="w-4 h-4 text-amber-700" />}
+                {currentTree.status === 'Rejected' && <AlertOctagon className="w-4 h-4 text-rose-700" />}
+                <span className="text-charcoal-900">{currentTree.status}</span>
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
-              <span className="text-slate-400 flex items-center gap-1">
-                <User className="w-3.5 h-3.5 text-slate-500" /> Contributor
+            <div className="p-3.5 rounded-xl bg-warm-50 border border-warm-300 space-y-1">
+              <span className="text-charcoal-500 flex items-center gap-1">
+                <User className="w-3.5 h-3.5 text-charcoal-400" /> Contributor
               </span>
-              <div className="font-medium text-slate-200">{currentTree.contributor?.name || 'Contributor User'}</div>
+              <div className="font-medium text-charcoal-800">{currentTree.contributor?.name || 'Contributor User'}</div>
             </div>
 
-            <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
-              <span className="text-slate-400 flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5 text-slate-500" /> Planted Date
+            <div className="p-3.5 rounded-xl bg-warm-50 border border-warm-300 space-y-1">
+              <span className="text-charcoal-500 flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-charcoal-400" /> Planted Date
               </span>
-              <div className="font-medium text-slate-200">{currentTree.plantedOn}</div>
+              <div className="font-mono text-charcoal-800">{currentTree.plantedOn}</div>
             </div>
 
-            <div className="col-span-1 sm:col-span-2 p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
-              <span className="text-slate-400 flex items-center gap-1">
-                <MapPin className="w-3.5 h-3.5 text-blue-400" /> Geographic Coordinates
+            <div className="col-span-1 sm:col-span-2 p-3.5 rounded-xl bg-warm-50 border border-warm-300 space-y-1">
+              <span className="text-charcoal-500 flex items-center gap-1">
+                <MapPin className="w-3.5 h-3.5 text-slate-700" /> Geographic Coordinates
               </span>
-              <div className="font-mono text-slate-200 text-xs">
+              <div className="font-mono text-charcoal-800 text-xs">
                 Latitude: {currentTree.latitude?.toFixed(6)}°N | Longitude: {currentTree.longitude?.toFixed(6)}°E
               </div>
             </div>
           </div>
 
           {/* Photo Evidence Preview */}
-          <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-2">
-            <h4 className="font-semibold text-slate-300 text-xs uppercase tracking-wider">Photo Evidence</h4>
+          <div className="p-4 rounded-xl bg-warm-50 border border-warm-300 space-y-2">
+            <h4 className="font-semibold text-charcoal-700 text-xs uppercase tracking-wider">Photo Evidence</h4>
             {currentTree.photoReference ? (
-              <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 break-all font-mono">
+              <div className="p-3 rounded-lg bg-white border border-warm-300 text-xs text-charcoal-800 break-all font-mono">
                 {currentTree.photoReference}
               </div>
             ) : (
-              <p className="text-xs text-slate-500 italic">No external photo reference provided.</p>
+              <p className="text-xs text-charcoal-500 italic">No external photo reference provided.</p>
             )}
           </div>
 
@@ -176,9 +176,9 @@ export default function VerificationModal({ tree, onClose, onStatusUpdated }) {
 
           {/* 1. If Pending -> Action: Start Review */}
           {currentTree.status === 'Pending' && (
-            <div className="p-4 rounded-2xl bg-amber-950/30 border border-amber-500/30 space-y-3">
-              <div className="flex items-center gap-2 text-amber-300 text-xs font-semibold">
-                <Clock className="w-4 h-4" />
+            <div className="p-4 rounded-2xl bg-[#fef9ed] border border-[#f0dda2] space-y-3">
+              <div className="flex items-center gap-2 text-[#855b11] text-xs font-semibold">
+                <Clock className="w-4 h-4 text-[#855b11]" />
                 <span>This submission is Pending review by coordinator.</span>
               </div>
               <button
@@ -186,9 +186,9 @@ export default function VerificationModal({ tree, onClose, onStatusUpdated }) {
                 data-testid="start-review-button"
                 disabled={actionLoading}
                 onClick={handleStartReview}
-                className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+                className="w-full py-2.5 px-4 rounded-xl bg-forest-900 hover:bg-forest-800 text-white text-xs font-semibold shadow-subtle transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                {actionLoading ? <LoadingSpinner size="sm" /> : <><Eye className="w-4 h-4" /><span>Start Review (Lock for Verification)</span></>}
+                {actionLoading ? <LoadingSpinner size="sm" inline message="Locking..." /> : <><Eye className="w-4 h-4 text-forest-200" /><span>Start Review (Lock for Verification)</span></>}
               </button>
             </div>
           )}
@@ -197,14 +197,14 @@ export default function VerificationModal({ tree, onClose, onStatusUpdated }) {
           {currentTree.status === 'Under Review' && (
             <div className="space-y-4">
               {/* Approval Box */}
-              <div className="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-500/30 space-y-3">
+              <div className="p-4 rounded-2xl bg-[#edf7ee] border border-[#b4dbbe] space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-emerald-300 text-xs font-semibold">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <div className="flex items-center gap-2 text-[#194c25] text-xs font-bold">
+                    <CheckCircle2 className="w-4 h-4 text-[#194c25]" />
                     <span>Approve Verification & Issue Tree ID</span>
                   </div>
                 </div>
-                <p className="text-[11px] text-slate-400">
+                <p className="text-[11px] text-charcoal-600">
                   Approving will atomically lock the record, assign a permanent authoritative Tree ID, and mark the tree as Verified.
                 </p>
                 <button
@@ -212,21 +212,21 @@ export default function VerificationModal({ tree, onClose, onStatusUpdated }) {
                   data-testid="approve-verification-button"
                   disabled={actionLoading}
                   onClick={handleApprove}
-                  className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+                  className="w-full py-2.5 px-4 rounded-xl bg-forest-900 hover:bg-forest-800 text-white text-xs font-semibold shadow-subtle transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  {actionLoading ? <LoadingSpinner size="sm" /> : <><CheckCircle2 className="w-4 h-4" /><span>Confirm Approval</span></>}
+                  {actionLoading ? <LoadingSpinner size="sm" inline message="Approving..." /> : <><CheckCircle2 className="w-4 h-4 text-forest-200" /><span>Confirm Approval</span></>}
                 </button>
               </div>
 
               {/* Rejection Form */}
-              <form onSubmit={handleReject} className="p-4 rounded-2xl bg-rose-950/30 border border-rose-500/30 space-y-3">
-                <div className="flex items-center gap-2 text-rose-300 text-xs font-semibold">
-                  <AlertOctagon className="w-4 h-4 text-rose-400" />
+              <form onSubmit={handleReject} className="p-4 rounded-2xl bg-[#fdf2f2] border border-[#f6c6c6] space-y-3">
+                <div className="flex items-center gap-2 text-[#992222] text-xs font-bold">
+                  <AlertOctagon className="w-4 h-4 text-[#b91c1c]" />
                   <span>Reject Verification</span>
                 </div>
                 <div>
-                  <label htmlFor="rejection-reason" className="block text-[11px] font-semibold text-slate-300 mb-1">
-                    Mandatory Rejection Reason <span className="text-rose-400">*</span>
+                  <label htmlFor="rejection-reason" className="block text-[11px] font-semibold text-charcoal-700 mb-1">
+                    Mandatory Rejection Reason <span className="text-rose-700">*</span>
                   </label>
                   <textarea
                     id="rejection-reason"
@@ -235,10 +235,10 @@ export default function VerificationModal({ tree, onClose, onStatusUpdated }) {
                     placeholder="Provide specific feedback (e.g. Photo evidence is too blurry to identify species)."
                     value={rejectionReason}
                     onChange={(e) => setRejectionReason(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-rose-500"
+                    className="w-full px-3 py-2 rounded-xl bg-white border border-[#e5a8a8] text-xs text-charcoal-900 focus:outline-none focus:border-rose-600"
                   />
                   {validationError && (
-                    <p className="text-[11px] text-rose-400 mt-1 flex items-center gap-1">
+                    <p className="text-[11px] text-rose-700 mt-1 flex items-center gap-1">
                       <AlertCircle className="w-3 h-3" /> {validationError}
                     </p>
                   )}
@@ -247,9 +247,9 @@ export default function VerificationModal({ tree, onClose, onStatusUpdated }) {
                   type="submit"
                   data-testid="reject-verification-button"
                   disabled={actionLoading}
-                  className="w-full py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-md transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+                  className="w-full py-2.5 px-4 rounded-xl bg-rose-700 hover:bg-rose-800 text-white text-xs font-semibold shadow-subtle transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  {actionLoading ? <LoadingSpinner size="sm" /> : <><AlertOctagon className="w-4 h-4" /><span>Confirm Rejection</span></>}
+                  {actionLoading ? <LoadingSpinner size="sm" inline message="Rejecting..." /> : <><AlertOctagon className="w-4 h-4 text-rose-200" /><span>Confirm Rejection</span></>}
                 </button>
               </form>
             </div>
@@ -257,14 +257,14 @@ export default function VerificationModal({ tree, onClose, onStatusUpdated }) {
 
           {/* 3. If Verified -> Display Authoritative Tree ID */}
           {currentTree.status === 'Verified' && (
-            <div data-testid="verified-success-box" className="p-5 rounded-2xl bg-emerald-950/60 border border-emerald-500/40 space-y-3">
-              <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
-                <CheckCircle2 className="w-5 h-5" />
+            <div data-testid="verified-success-box" className="p-5 rounded-2xl bg-[#edf7ee] border border-[#b4dbbe] space-y-3">
+              <div className="flex items-center gap-2 text-[#194c25] font-bold text-sm">
+                <CheckCircle2 className="w-5 h-5 text-forest-700" />
                 <span>Authoritative Tree Identity Issued!</span>
               </div>
-              <div className="p-3 rounded-xl bg-slate-950/80 border border-emerald-500/30 flex items-center justify-between">
-                <span className="text-xs text-slate-400">Permanent Tree ID:</span>
-                <span data-testid="authoritative-tree-id-display" className="text-base font-bold font-mono text-emerald-300">
+              <div className="p-3.5 rounded-xl bg-white border border-[#b4dbbe] flex items-center justify-between">
+                <span className="text-xs text-charcoal-600 font-sans">Permanent Tree ID:</span>
+                <span data-testid="authoritative-tree-id-display" className="text-base font-bold font-mono text-forest-900">
                   {currentTree.treeId || approvedIdentity || 'ER-PLT-VERIFIED'}
                 </span>
               </div>
@@ -272,9 +272,9 @@ export default function VerificationModal({ tree, onClose, onStatusUpdated }) {
                 <div className="pt-1">
                   <Link
                     to={`/tree/${encodeURIComponent(currentTree.treeId || approvedIdentity)}`}
-                    className="w-full py-2 px-3 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-500/40 text-emerald-200 text-xs font-semibold flex items-center justify-center gap-2 transition-colors"
+                    className="w-full py-2 px-3 rounded-xl bg-forest-900 hover:bg-forest-800 text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-subtle transition-colors"
                   >
-                    <QrCode className="w-4 h-4" />
+                    <QrCode className="w-4 h-4 text-forest-200" />
                     <span>Open Public Profile & QR Identity</span>
                   </Link>
                 </div>
@@ -284,12 +284,12 @@ export default function VerificationModal({ tree, onClose, onStatusUpdated }) {
 
           {/* 4. If Rejected -> Display Reason */}
           {currentTree.status === 'Rejected' && (
-            <div className="p-4 rounded-2xl bg-rose-950/40 border border-rose-500/30 space-y-2">
-              <div className="flex items-center gap-2 text-rose-300 font-bold text-xs">
-                <AlertOctagon className="w-4 h-4 text-rose-400" />
+            <div className="p-4 rounded-2xl bg-[#fdf2f2] border border-[#f6c6c6] space-y-2">
+              <div className="flex items-center gap-2 text-[#992222] font-bold text-xs">
+                <AlertOctagon className="w-4 h-4 text-[#b91c1c]" />
                 <span>Verification Rejected</span>
               </div>
-              <p className="text-xs text-rose-200/90 leading-relaxed pl-6">
+              <p className="text-xs text-[#7f1d1d] leading-relaxed pl-6">
                 Reason: {currentTree.rejectionReason || currentTree.reason || 'Plantation verification was rejected.'}
               </p>
             </div>
@@ -297,11 +297,11 @@ export default function VerificationModal({ tree, onClose, onStatusUpdated }) {
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-900/90 flex justify-end">
+        <div className="p-4 border-t border-warm-300 bg-warm-50 flex justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-colors"
+            className="px-4 py-2 rounded-xl bg-white border border-warm-400 hover:bg-warm-100 text-charcoal-700 text-xs font-semibold transition-colors"
           >
             Close
           </button>

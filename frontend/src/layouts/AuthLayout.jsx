@@ -3,24 +3,29 @@ import { Sprout } from 'lucide-react';
 
 export default function AuthLayout() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-slate-100 flex flex-col items-center justify-center p-4 sm:p-6 selection:bg-emerald-500 selection:text-slate-950">
+    <div className="min-h-screen bg-warm-100 text-charcoal-900 flex flex-col items-center justify-center p-4 sm:p-6">
       <div className="mb-6 text-center">
-        <Link to="/" className="inline-flex items-center gap-3 group">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform shadow-lg shadow-emerald-950/40">
-            <Sprout className="w-7 h-7" />
+        <Link to="/" className="inline-flex items-center gap-2.5 group">
+          <div className="w-10 h-10 rounded-xl bg-forest-900 text-white flex items-center justify-center shadow-subtle group-hover:bg-forest-800 transition-colors">
+            <Sprout className="w-5 h-5 text-forest-200" />
           </div>
-          <span className="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-teal-200 bg-clip-text text-transparent">
-            EcoRevive
-          </span>
+          <div className="text-left">
+            <span className="text-xl font-bold tracking-tight text-forest-900 font-serif block leading-none">
+              EcoRevive
+            </span>
+            <span className="text-[10px] uppercase tracking-wider text-charcoal-500 font-semibold font-sans">
+              Verification Platform
+            </span>
+          </div>
         </Link>
       </div>
 
-      <div className="w-full max-w-md bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-slate-950/80">
+      <div className="w-full max-w-md bg-white border border-warm-400 rounded-2xl p-6 sm:p-8 shadow-card">
         <Outlet />
       </div>
 
-      <div className="mt-8 text-center text-xs text-slate-500">
-        <Link to="/" className="hover:text-emerald-400 transition-colors">
+      <div className="mt-6 text-center text-xs text-charcoal-500">
+        <Link to="/" className="hover:text-forest-800 transition-colors font-medium">
           &larr; Back to EcoRevive Platform
         </Link>
       </div>

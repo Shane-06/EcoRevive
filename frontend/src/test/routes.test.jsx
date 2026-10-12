@@ -25,6 +25,10 @@ describe('Frontend Foundation — Route Guards & Navigation Tests', () => {
   it('should render the public Home page on /', () => {
     renderWithRouter('/');
     expect(screen.getByText(/Transparent Lifecycle Management for/i)).toBeInTheDocument();
+    expect(screen.getByText(/The 9-Stage Plantation Lifecycle/i)).toBeInTheDocument();
+    ['Discover', 'Assess', 'Plant', 'Prove', 'Verify', 'Identify', 'Monitor', 'Reward', 'Track'].forEach((stage) => {
+      expect(screen.getByText(stage)).toBeInTheDocument();
+    });
   });
 
   it('should render the public Map page on /map', () => {

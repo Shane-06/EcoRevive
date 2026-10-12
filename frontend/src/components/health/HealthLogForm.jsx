@@ -29,15 +29,15 @@ export default function HealthLogForm({ defaultTreeId = '', onSuccess, onTreeCha
   const getStatusIcon = (status) => {
     switch (status) {
       case 'Healthy':
-        return <HeartPulse className="w-4 h-4 text-emerald-400" />;
+        return <HeartPulse className="w-4 h-4 text-forest-700" />;
       case 'Good':
-        return <CheckCircle2 className="w-4 h-4 text-teal-400" />;
+        return <CheckCircle2 className="w-4 h-4 text-blue-700" />;
       case 'Needs Attention':
-        return <AlertTriangle className="w-4 h-4 text-amber-400" />;
+        return <AlertTriangle className="w-4 h-4 text-amber-600" />;
       case 'Dead':
-        return <Skull className="w-4 h-4 text-rose-400" />;
+        return <Skull className="w-4 h-4 text-rose-600" />;
       default:
-        return <Activity className="w-4 h-4 text-slate-400" />;
+        return <Activity className="w-4 h-4 text-charcoal-500" />;
     }
   };
 
@@ -92,15 +92,15 @@ export default function HealthLogForm({ defaultTreeId = '', onSuccess, onTreeCha
     <form
       data-testid="health-log-form"
       onSubmit={handleSubmit}
-      className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-5"
+      className="p-6 sm:p-7 rounded-3xl bg-white border border-warm-400 shadow-card space-y-5"
     >
-      <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
-        <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 text-teal-400 flex items-center justify-center">
+      <div className="flex items-center gap-3 border-b border-warm-300 pb-4">
+        <div className="w-10 h-10 rounded-xl bg-forest-50 border border-forest-200 text-forest-800 flex items-center justify-center">
           <Activity className="w-5 h-5" />
         </div>
         <div>
-          <h3 className="text-lg font-bold text-white">Record Health Observation</h3>
-          <p className="text-xs text-slate-400">
+          <h3 className="text-base font-bold font-serif text-charcoal-900">Record Health Observation</h3>
+          <p className="text-xs text-charcoal-600">
             Submit an on-site health inspection for a verified tree.
           </p>
         </div>
@@ -120,16 +120,16 @@ export default function HealthLogForm({ defaultTreeId = '', onSuccess, onTreeCha
       )}
 
       {successMessage && (
-        <div className="p-3.5 rounded-2xl bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+        <div className="p-3.5 rounded-xl bg-forest-50 border border-forest-200 text-forest-800 text-xs flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-forest-600 shrink-0" />
           <span>{successMessage}</span>
         </div>
       )}
 
       {/* Tree ID Input */}
       <div className="space-y-1.5">
-        <label htmlFor="health-tree-id" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
-          Authoritative Tree ID <span className="text-rose-400">*</span>
+        <label htmlFor="health-tree-id" className="block text-xs font-semibold text-charcoal-700 uppercase tracking-wider">
+          Authoritative Tree ID <span className="text-rose-600">*</span>
         </label>
         <input
           id="health-tree-id"
@@ -139,17 +139,17 @@ export default function HealthLogForm({ defaultTreeId = '', onSuccess, onTreeCha
           onChange={handleTreeIdChange}
           placeholder="e.g. ER-PLT-00001"
           disabled={loading}
-          className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 placeholder-slate-500 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500/50 disabled:opacity-50"
+          className="w-full px-4 py-2.5 rounded-xl bg-warm-50 border border-warm-400 text-charcoal-900 placeholder-charcoal-400 font-mono text-sm focus:outline-none focus:border-forest-700 disabled:opacity-50"
         />
         {validationErrors.treeId && (
-          <p className="text-xs text-rose-400">{validationErrors.treeId}</p>
+          <p className="text-xs text-rose-600">{validationErrors.treeId}</p>
         )}
       </div>
 
       {/* Health Status Selector (4 Frozen Statuses) */}
       <div className="space-y-1.5">
-        <label htmlFor="health-status-select" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
-          Observed Health Status <span className="text-rose-400">*</span>
+        <label htmlFor="health-status-select" className="block text-xs font-semibold text-charcoal-700 uppercase tracking-wider">
+          Observed Health Status <span className="text-rose-600">*</span>
         </label>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {FROZEN_HEALTH_STATUSES.map((status) => {
@@ -164,16 +164,16 @@ export default function HealthLogForm({ defaultTreeId = '', onSuccess, onTreeCha
                   setValidationErrors((prev) => ({ ...prev, healthStatus: null }));
                 }}
                 disabled={loading}
-                className={`flex items-center justify-center gap-2 p-3 rounded-xl border text-xs font-semibold transition-all ${
+                className={`flex items-center justify-center gap-1.5 p-3 rounded-xl border text-xs font-semibold transition-all ${
                   isSelected
                     ? status === 'Healthy'
-                      ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 ring-2 ring-emerald-500/30'
+                      ? 'bg-[#edf7ee] border-[#b4dbbe] text-[#194c25] ring-2 ring-[#b4dbbe]/50'
                       : status === 'Good'
-                      ? 'bg-teal-950/80 border-teal-500 text-teal-300 ring-2 ring-teal-500/30'
+                      ? 'bg-[#eff6ff] border-[#bfdbfe] text-[#1e40af] ring-2 ring-[#bfdbfe]/50'
                       : status === 'Needs Attention'
-                      ? 'bg-amber-950/80 border-amber-500 text-amber-300 ring-2 ring-amber-500/30'
-                      : 'bg-rose-950/80 border-rose-500 text-rose-300 ring-2 ring-rose-500/30'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                      ? 'bg-[#fef9ed] border-[#f0dda2] text-[#855b11] ring-2 ring-[#f0dda2]/50'
+                      : 'bg-[#fdf2f2] border-[#f6c6c6] text-[#992222] ring-2 ring-[#f6c6c6]/50'
+                    : 'bg-warm-50 border-warm-300 text-charcoal-600 hover:text-charcoal-900 hover:border-warm-400'
                 }`}
               >
                 {getStatusIcon(status)}
@@ -183,17 +183,17 @@ export default function HealthLogForm({ defaultTreeId = '', onSuccess, onTreeCha
           })}
         </div>
         {validationErrors.healthStatus && (
-          <p className="text-xs text-rose-400">{validationErrors.healthStatus}</p>
+          <p className="text-xs text-rose-600">{validationErrors.healthStatus}</p>
         )}
       </div>
 
       {/* Notes Input */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <label htmlFor="health-notes" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
-            Observation Notes <span className="text-slate-500 lowercase">(optional)</span>
+          <label htmlFor="health-notes" className="block text-xs font-semibold text-charcoal-700 uppercase tracking-wider">
+            Observation Notes <span className="text-charcoal-500 lowercase font-normal">(optional)</span>
           </label>
-          <span className="text-[10px] text-slate-500">{notes.length}/1000</span>
+          <span className="text-[10px] text-charcoal-400 font-mono">{notes.length}/1000</span>
         </div>
         <div className="relative">
           <textarea
@@ -208,21 +208,21 @@ export default function HealthLogForm({ defaultTreeId = '', onSuccess, onTreeCha
             }}
             placeholder="Document canopy condition, leaf discoloration, moisture, or insect signs..."
             disabled={loading}
-            className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500/50 disabled:opacity-50 resize-none"
+            className="w-full px-4 py-2.5 rounded-xl bg-warm-50 border border-warm-400 text-charcoal-900 placeholder-charcoal-400 text-xs sm:text-sm focus:outline-none focus:border-forest-700 disabled:opacity-50 resize-none"
           />
         </div>
         {validationErrors.notes && (
-          <p className="text-xs text-rose-400">{validationErrors.notes}</p>
+          <p className="text-xs text-rose-600">{validationErrors.notes}</p>
         )}
       </div>
 
       {/* Photo Reference Input */}
       <div className="space-y-1.5">
-        <label htmlFor="health-photo-ref" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
-          Inspection Photo Reference <span className="text-slate-500 lowercase">(optional)</span>
+        <label htmlFor="health-photo-ref" className="block text-xs font-semibold text-charcoal-700 uppercase tracking-wider">
+          Inspection Photo Reference <span className="text-charcoal-500 lowercase font-normal">(optional)</span>
         </label>
         <div className="relative">
-          <Camera className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+          <Camera className="w-4 h-4 text-charcoal-400 absolute left-3.5 top-3" />
           <input
             id="health-photo-ref"
             data-testid="health-photo-ref-input"
@@ -231,7 +231,7 @@ export default function HealthLogForm({ defaultTreeId = '', onSuccess, onTreeCha
             onChange={(e) => setPhotoReference(e.target.value)}
             placeholder="e.g. uploads/inspection-canopy-2026.jpg or image URL"
             disabled={loading}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500/50 disabled:opacity-50"
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-warm-50 border border-warm-400 text-charcoal-900 placeholder-charcoal-400 text-xs sm:text-sm focus:outline-none focus:border-forest-700 disabled:opacity-50"
           />
         </div>
       </div>
@@ -242,13 +242,13 @@ export default function HealthLogForm({ defaultTreeId = '', onSuccess, onTreeCha
           type="submit"
           data-testid="submit-health-log-btn"
           disabled={loading}
-          className="w-full py-3 px-4 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-semibold text-sm shadow-lg shadow-teal-950/40 flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none"
+          className="w-full py-3 px-4 rounded-xl bg-forest-900 hover:bg-forest-800 text-white font-semibold text-sm shadow-subtle flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:pointer-events-none"
         >
           {loading ? (
             <LoadingSpinner size="sm" message="Submitting observation..." inline />
           ) : (
             <>
-              <FileText className="w-4 h-4" />
+              <FileText className="w-4 h-4 text-forest-200" />
               <span>Submit Health Observation</span>
             </>
           )}

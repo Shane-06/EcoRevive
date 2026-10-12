@@ -60,34 +60,34 @@ export default function AdminDashboardPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-5">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-warm-200 pb-5">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1">
-              <Shield className="w-3 h-3" /> System Coordinator View
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-800 border border-purple-200 flex items-center gap-1 font-mono">
+              <Shield className="w-3 h-3 text-purple-700" /> System Coordinator View
             </span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-bold text-charcoal-900 font-serif tracking-tight">
             Platform Analytics & Executive Dashboard
           </h1>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-charcoal-600">
             System-wide statistics on tree registrations, coordinator verification throughput, and reward token circulation.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <button
             type="button"
             onClick={fetchAdminDashboard}
             disabled={loading}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-charcoal-700 bg-white border border-warm-300 hover:bg-warm-100/80 rounded-lg shadow-sm transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
           </button>
           <Link
             to="/admin/verifications"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 rounded-xl shadow-md transition-all hover:scale-[1.02]"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-white bg-forest-900 hover:bg-forest-800 rounded-lg shadow-sm transition-all"
           >
             <ClipboardList className="w-3.5 h-3.5" />
             <span>Verification Queue</span>
@@ -150,45 +150,45 @@ export default function AdminDashboardPage() {
         </div>
 
         <div className="lg:col-span-4 space-y-4">
-          <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
-            <h3 className="text-base font-bold text-white">Administrative Actions</h3>
-            <p className="text-xs text-slate-400">
+          <div className="p-6 rounded-2xl bg-white border border-warm-200 shadow-card space-y-4">
+            <h3 className="text-base font-semibold text-charcoal-900 font-serif">Administrative Actions</h3>
+            <p className="text-xs text-charcoal-500 leading-relaxed">
               Direct access to manual verification workflows and coordinator auditing tools.
             </p>
 
-            <div className="space-y-2.5 pt-2">
+            <div className="space-y-2.5 pt-1">
               <Link
                 to="/admin/verifications"
-                className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 hover:border-purple-500/40 transition-colors flex items-center justify-between text-xs text-slate-300 hover:text-white"
+                className="p-3.5 rounded-xl bg-warm-50/70 border border-warm-200 hover:border-purple-300 transition-colors flex items-center justify-between text-xs text-charcoal-700 hover:text-charcoal-900"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 flex items-center justify-center">
                     <ClipboardList className="w-4 h-4" />
                   </div>
                   <div>
-                    <p className="font-bold text-white">Verification Queue</p>
-                    <p className="text-[10px] text-slate-500">
+                    <p className="font-semibold text-charcoal-900">Verification Queue</p>
+                    <p className="text-[10px] text-charcoal-500">
                       {plantations.pending + plantations.underReview} awaiting action
                     </p>
                   </div>
                 </div>
-                <ArrowRight className="w-4 h-4 text-slate-500" />
+                <ArrowRight className="w-4 h-4 text-charcoal-400" />
               </Link>
 
               <Link
                 to="/map"
-                className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 hover:border-purple-500/40 transition-colors flex items-center justify-between text-xs text-slate-300 hover:text-white"
+                className="p-3.5 rounded-xl bg-warm-50/70 border border-warm-200 hover:border-forest-700/40 transition-colors flex items-center justify-between text-xs text-charcoal-700 hover:text-charcoal-900"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
-                    <Trees className="w-4 h-4" />
+                  <div className="w-8 h-8 rounded-lg bg-forest-50 border border-forest-200 text-forest-800 flex items-center justify-center">
+                    <Trees className="w-4 h-4 text-forest-700" />
                   </div>
                   <div>
-                    <p className="font-bold text-white">Geospatial Explorer</p>
-                    <p className="text-[10px] text-slate-500">Inspect verified tree pins</p>
+                    <p className="font-semibold text-charcoal-900">Geospatial Explorer</p>
+                    <p className="text-[10px] text-charcoal-500">Inspect verified tree pins</p>
                   </div>
                 </div>
-                <ArrowRight className="w-4 h-4 text-slate-500" />
+                <ArrowRight className="w-4 h-4 text-charcoal-400" />
               </Link>
             </div>
           </div>

@@ -20,14 +20,14 @@ export default function NotFound({
       data-testid="not-found-state"
       className="min-h-[50vh] flex flex-col items-center justify-center text-center p-6"
     >
-      <div className="w-16 h-16 bg-slate-800/80 border border-slate-700 rounded-2xl flex items-center justify-center text-emerald-400 mb-6 shadow-xl">
-        <Compass className="w-8 h-8" />
+      <div className="w-14 h-14 bg-warm-200 border border-warm-400 rounded-2xl flex items-center justify-center text-forest-800 mb-5 shadow-subtle">
+        <Compass className="w-7 h-7" />
       </div>
-      <h1 className="text-3xl font-bold text-slate-100 tracking-tight mb-2">{title}</h1>
-      <p className="text-slate-400 max-w-md mb-8 text-sm leading-relaxed">{message}</p>
+      <h1 className="text-3xl font-bold text-charcoal-900 font-serif tracking-tight mb-2">{title}</h1>
+      <p className="text-charcoal-600 max-w-md mb-6 text-sm leading-relaxed">{message}</p>
       <Link
         to={returnPath}
-        className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-semibold shadow-lg shadow-emerald-950/30 transition-all hover:scale-[1.02] active:scale-[0.98]"
+        className="inline-flex items-center gap-2 px-5 py-2.5 bg-forest-900 hover:bg-forest-800 text-white rounded-xl text-sm font-semibold shadow-subtle transition-colors"
       >
         <ArrowLeft className="w-4 h-4" />
         {returnLabel}

@@ -1,4 +1,4 @@
-import { AlertCircle, XCircle } from 'lucide-react';
+import { AlertCircle, X } from 'lucide-react';
 
 /**
  * Reusable Error Alert Component
@@ -20,18 +20,18 @@ export default function ErrorAlert({
     <div
       role="alert"
       data-testid="error-alert"
-      className="p-4 rounded-xl bg-red-950/40 border border-red-500/30 text-red-200 flex items-start gap-3 shadow-md my-3"
+      className="p-4 rounded-xl bg-[#fdf2f2] border border-[#f5c6c6] text-[#7a1f1f] flex items-start gap-3 my-3 shadow-subtle"
     >
-      <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-      <div className="flex-1 text-sm">
-        {title && <h4 className="font-semibold text-red-300 mb-0.5">{title}</h4>}
-        <p className="text-red-200/90 leading-relaxed">{message}</p>
+      <AlertCircle className="w-5 h-5 text-[#b91c1c] shrink-0 mt-0.5" />
+      <div className="flex-1 text-xs sm:text-sm">
+        {title && <h4 className="font-semibold text-[#991b1b] mb-0.5">{title}</h4>}
+        <p className="text-[#7f1d1d] leading-relaxed">{message}</p>
 
         {onRetry && (
           <button
             type="button"
             onClick={onRetry}
-            className="mt-2.5 px-3 py-1 bg-red-800/50 hover:bg-red-700/60 border border-red-500/40 rounded-lg text-xs font-semibold text-red-100 transition-colors"
+            className="mt-2.5 px-3 py-1 bg-white hover:bg-[#fae6e6] border border-[#e5a8a8] rounded-lg text-xs font-semibold text-[#991b1b] transition-colors shadow-subtle"
           >
             Try again
           </button>
@@ -43,9 +43,9 @@ export default function ErrorAlert({
           type="button"
           onClick={onDismiss}
           aria-label="Dismiss error"
-          className="text-red-400 hover:text-red-200 transition-colors p-1"
+          className="text-[#991b1b] hover:text-[#7f1d1d] transition-colors p-1"
         >
-          <XCircle className="w-4 h-4" />
+          <X className="w-4 h-4" />
         </button>
       )}
     </div>

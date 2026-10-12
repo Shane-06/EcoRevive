@@ -38,16 +38,16 @@ export default function LoginPage() {
 
   return (
     <div className="space-y-6">
-      <div className="text-center space-y-1">
-        <h1 className="text-2xl font-bold text-white tracking-tight">Sign In to EcoRevive</h1>
-        <p className="text-sm text-slate-400">Access your plantation dashboard and records</p>
+      <div className="text-center space-y-1.5">
+        <h1 className="text-2xl font-bold font-serif text-charcoal-900 tracking-tight">Sign In to EcoRevive</h1>
+        <p className="text-xs sm:text-sm text-charcoal-600">Access your plantation dashboard and verification records</p>
       </div>
 
       <ErrorAlert message={error} onDismiss={() => setError(null)} />
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label htmlFor="email" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+          <label htmlFor="email" className="block text-xs font-semibold text-charcoal-700 uppercase tracking-wider mb-1.5">
             Email Address
           </label>
           <input
@@ -58,12 +58,12 @@ export default function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="contributor@ecorevive.org"
-            className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+            className="w-full px-3.5 py-2.5 bg-warm-50 border border-warm-400 rounded-xl text-sm text-charcoal-900 placeholder-charcoal-400 focus:outline-none focus:border-forest-700 transition-colors"
           />
         </div>
 
         <div>
-          <label htmlFor="password" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+          <label htmlFor="password" className="block text-xs font-semibold text-charcoal-700 uppercase tracking-wider mb-1.5">
             Password
           </label>
           <input
@@ -74,30 +74,32 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
-            className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+            className="w-full px-3.5 py-2.5 bg-warm-50 border border-warm-400 rounded-xl text-sm text-charcoal-900 placeholder-charcoal-400 focus:outline-none focus:border-forest-700 transition-colors"
           />
         </div>
 
         <button
           type="submit"
           disabled={submitting}
-          className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800/50 text-white font-semibold rounded-xl text-sm shadow-lg shadow-emerald-950/50 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed"
+          className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-forest-900 hover:bg-forest-800 disabled:opacity-50 text-white font-semibold rounded-xl text-sm shadow-subtle transition-all active:scale-[0.99] disabled:cursor-not-allowed"
         >
           {submitting ? (
             <>
-              <Loader2 className="w-4 h-4 animate-spin" /> Signing In...
+              <Loader2 className="w-4 h-4 animate-spin text-forest-200" />
+              <span>Signing In...</span>
             </>
           ) : (
             <>
-              <LogIn className="w-4 h-4" /> Sign In
+              <LogIn className="w-4 h-4 text-forest-200" />
+              <span>Sign In</span>
             </>
           )}
         </button>
       </form>
 
-      <div className="pt-4 border-t border-slate-800 text-center text-xs text-slate-400">
+      <div className="pt-4 border-t border-warm-300 text-center text-xs text-charcoal-600">
         Don&apos;t have an account?{' '}
-        <Link to="/register" className="font-semibold text-emerald-400 hover:text-emerald-300 transition-colors">
+        <Link to="/register" className="font-semibold text-forest-800 hover:text-forest-900 transition-colors underline">
           Register here
         </Link>
       </div>

@@ -135,12 +135,12 @@ export default function MapView({
       });
 
       const popupContent = document.createElement('div');
-      popupContent.className = 'p-1 text-slate-100 text-xs space-y-1';
+      popupContent.className = 'p-1 text-charcoal-900 text-xs space-y-1';
       popupContent.innerHTML = `
-        <div class="font-bold text-emerald-400 text-sm">${tree.species || 'Verified Tree'}</div>
-        <div class="text-slate-300 font-mono">${tree.treeId || 'ID Pending'}</div>
-        <div class="text-slate-400">${tree.latitude.toFixed(4)}, ${tree.longitude.toFixed(4)}</div>
-        <div class="inline-block mt-1 px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-[10px] font-semibold uppercase tracking-wider">
+        <div class="font-bold text-forest-900 text-sm font-serif">${tree.species || 'Verified Tree'}</div>
+        <div class="text-charcoal-600 font-mono text-[11px]">${tree.treeId || 'ID Pending'}</div>
+        <div class="text-charcoal-500 text-[11px] font-mono">${tree.latitude.toFixed(4)}, ${tree.longitude.toFixed(4)}</div>
+        <div class="inline-block mt-1 px-2 py-0.5 rounded bg-forest-50 border border-forest-200 text-forest-800 text-[10px] font-bold uppercase tracking-wider">
           ${tree.status || 'Verified'}
         </div>
       `;
@@ -170,10 +170,10 @@ export default function MapView({
       });
 
       marker.bindPopup(`
-        <div class="p-1 text-xs text-slate-100 space-y-1">
-          <div class="font-bold text-blue-400 text-sm">Selected Assessment Point</div>
-          <div class="font-mono text-slate-300">${selectedLocation.lat.toFixed(5)}, ${selectedLocation.lng.toFixed(5)}</div>
-          <div class="text-slate-400 text-[11px]">Ready for environmental and suitability analysis</div>
+        <div class="p-1 text-xs text-charcoal-900 space-y-1">
+          <div class="font-bold text-slate-800 text-sm font-serif">Selected Assessment Point</div>
+          <div class="font-mono text-charcoal-700 text-[11px]">${selectedLocation.lat.toFixed(5)}, ${selectedLocation.lng.toFixed(5)}</div>
+          <div class="text-charcoal-500 text-[11px]">Ready for environmental and suitability analysis</div>
         </div>
       `);
 
@@ -197,7 +197,7 @@ export default function MapView({
   };
 
   return (
-    <div className="relative w-full h-full min-h-[400px] rounded-2xl overflow-hidden border border-slate-800 shadow-xl bg-slate-950">
+    <div className="relative w-full h-full min-h-[400px]">
       {/* The Leaflet map DOM node */}
       <div
         id="leaflet-map"
@@ -212,24 +212,24 @@ export default function MapView({
           type="button"
           onClick={handleRecenter}
           title="Recenter Map"
-          className="p-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-200 hover:text-emerald-400 border border-slate-700/80 shadow-lg backdrop-blur transition-colors"
+          className="p-2.5 rounded-xl bg-white/95 hover:bg-white text-charcoal-700 hover:text-forest-900 border border-warm-400 shadow-card backdrop-blur-sm transition-colors"
         >
           <Compass className="w-5 h-5" />
         </button>
       </div>
 
       {/* Map Information Bar Overlay */}
-      <div className="absolute bottom-3 left-3 z-[400] px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800/90 shadow-md backdrop-blur text-xs flex items-center gap-3 text-slate-300">
+      <div className="absolute bottom-3 left-3 z-[400] px-3.5 py-1.5 rounded-xl bg-white/95 border border-warm-400 shadow-card backdrop-blur-sm text-xs flex items-center gap-3 text-charcoal-700">
         <div className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="w-2 h-2 rounded-full bg-forest-600" />
           <span>
-            <strong className="text-white">{trees.length}</strong> verified {trees.length === 1 ? 'tree' : 'trees'} in view
+            <strong className="text-charcoal-900 font-semibold">{trees.length}</strong> verified {trees.length === 1 ? 'tree' : 'trees'} in view
           </span>
         </div>
         {selectedLocation && (
-          <div className="hidden sm:flex items-center gap-1 text-slate-400 border-l border-slate-700 pl-3">
+          <div className="hidden sm:flex items-center gap-1 text-charcoal-500 border-l border-warm-300 pl-3 font-mono text-[11px]">
             <span>Point:</span>
-            <span className="font-mono text-blue-400">
+            <span className="text-slate-800 font-semibold">
               {selectedLocation.lat.toFixed(4)}, {selectedLocation.lng.toFixed(4)}
             </span>
           </div>

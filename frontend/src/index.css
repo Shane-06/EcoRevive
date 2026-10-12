@@ -4,18 +4,49 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  background-color: #0f172a;
-  color: #f8fafc;
+@layer base {
+  :root {
+    --bg-page: #fbfbf9;
+    --bg-surface: #ffffff;
+    --bg-surface-subtle: #f4f3ef;
+    --text-primary: #1c241f;
+    --text-secondary: #515c55;
+    --text-muted: #68746c;
+    --border-subtle: #ded9cd;
+    --border-light: #eceae3;
+    --forest-primary: #172c1c;
+    --forest-hover: #24452a;
+    --forest-accent: #366e40;
+    --focus-ring: #2b5733;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    margin: 0;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: var(--bg-page);
+    color: var(--text-primary);
+    line-height: 1.5;
+  }
+
+  /* Accessible focus indicators */
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
 }
 
-/* Custom Leaflet Map Container & Marker Enhancements */
+/* Leaflet Map Styling */
 .leaflet-container {
   width: 100%;
   height: 100%;
-  background-color: #0b1329;
+  background-color: #e9e7e1;
+  font-family: inherit;
   z-index: 10;
 }
 
@@ -31,55 +62,366 @@ body {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background-color: #059669;
-  border: 2.5px solid #ffffff;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  background-color: #172c1c;
+  border: 2px solid #ffffff;
+  box-shadow: 0 3px 8px rgba(23, 44, 28, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #ffffff;
-  transition: transform 0.2s ease, background-color 0.2s ease;
+  transition: transform 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .custom-tree-pin:hover .pin-circle {
-  transform: scale(1.15);
-  background-color: #10b981;
+  transform: scale(1.12);
+  background-color: #24512e;
+  box-shadow: 0 6px 14px rgba(23, 44, 28, 0.4);
 }
 
 .custom-selected-pin .pin-circle {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background-color: #2563eb;
-  border: 2.5px solid #ffffff;
-  box-shadow: 0 0 15px rgba(37, 99, 235, 0.6);
+  background-color: #1e3a5f;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 4px rgba(30, 58, 95, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #ffffff;
-  animation: pulse-pin 2s infinite;
+  animation: pulse-pin 2.2s infinite ease-out;
 }
 
 @keyframes pulse-pin {
   0% {
-    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7);
+    box-shadow: 0 0 0 0 rgba(30, 58, 95, 0.4);
   }
   70% {
-    box-shadow: 0 0 0 12px rgba(37, 99, 235, 0);
+    box-shadow: 0 0 0 10px rgba(30, 58, 95, 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+    box-shadow: 0 0 0 0 rgba(30, 58, 95, 0);
   }
 }
 
 .leaflet-popup-content-wrapper {
-  background: #1e293b !important;
-  color: #f8fafc !important;
-  border: 1px solid #334155;
+  background: #ffffff !important;
+  color: #1c241f !important;
+  border: 1px solid #ded9cd !important;
   border-radius: 12px !important;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5) !important;
+  box-shadow: 0 8px 24px -4px rgba(28, 36, 31, 0.14) !important;
+  padding: 0 !important;
+}
+
+.leaflet-popup-content {
+  margin: 10px 14px !important;
+  line-height: 1.4 !important;
 }
 
 .leaflet-popup-tip {
-  background: #1e293b !important;
+  background: #ffffff !important;
+  border: 1px solid #ded9cd;
+  box-shadow: none !important;
 }
+
+.leaflet-bar {
+  border: 1px solid #ded9cd !important;
+  box-shadow: 0 2px 6px rgba(28, 36, 31, 0.08) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+.leaflet-bar a {
+  background-color: #ffffff !important;
+  color: #1c241f !important;
+  border-bottom: 1px solid #eceae3 !important;
+}
+
+.leaflet-bar a:hover {
+  background-color: #f4f3ef !important;
+  color: #172c1c !important;
+}
+
+/* ========================================================
+   BOTANICAL TREE LIFECYCLE ANIMATION STYLES (20s Continuous Loop)
+   ======================================================== */
+.tree-lifecycle-container {
+  contain: layout paint;
+}
+
+@keyframes tl-pulse-dot {
+  0%, 100% { opacity: 0.6; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+.tree-lifecycle-pulse {
+  animation: tl-pulse-dot 2.5s infinite ease-in-out;
+}
+
+/* Synchronized Lifecycle Stage Labels */
+.lifecycle-phase-text {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  white-space: nowrap;
+}
+
+@keyframes tl-label-seed {
+  0%, 11% { opacity: 1; }
+  12%, 100% { opacity: 0; }
+}
+@keyframes tl-label-sprout {
+  0%, 11.9% { opacity: 0; }
+  12%, 23% { opacity: 1; }
+  23.1%, 100% { opacity: 0; }
+}
+@keyframes tl-label-growth {
+  0%, 23.9% { opacity: 0; }
+  24%, 35% { opacity: 1; }
+  35.1%, 100% { opacity: 0; }
+}
+@keyframes tl-label-mature {
+  0%, 35.9% { opacity: 0; }
+  36%, 53% { opacity: 1; }
+  53.1%, 100% { opacity: 0; }
+}
+@keyframes tl-label-autumn {
+  0%, 53.9% { opacity: 0; }
+  54%, 67% { opacity: 1; }
+  67.1%, 100% { opacity: 0; }
+}
+@keyframes tl-label-dormant {
+  0%, 67.9% { opacity: 0; }
+  68%, 83% { opacity: 1; }
+  83.1%, 100% { opacity: 0; }
+}
+@keyframes tl-label-renewal {
+  0%, 83.9% { opacity: 0; }
+  84%, 98% { opacity: 1; }
+  98.1%, 100% { opacity: 0; }
+}
+
+.phase-seed { animation: tl-label-seed 20s infinite ease-in-out; }
+.phase-sprout { animation: tl-label-sprout 20s infinite ease-in-out; }
+.phase-growth { animation: tl-label-growth 20s infinite ease-in-out; }
+.phase-mature { animation: tl-label-mature 20s infinite ease-in-out; }
+.phase-autumn { animation: tl-label-autumn 20s infinite ease-in-out; }
+.phase-dormant { animation: tl-label-dormant 20s infinite ease-in-out; }
+.phase-renewal { animation: tl-label-renewal 20s infinite ease-in-out; }
+.phase-reduced-motion { opacity: 0; }
+
+/* Layer 2: Seed & Root Animations */
+@keyframes tl-seed-cycle {
+  0% { opacity: 1; transform: scale(0.92); transform-origin: 200px 348px; }
+  10%, 84% { opacity: 1; transform: scale(1); }
+  92% { opacity: 0.6; }
+  98% { opacity: 0.3; }
+  100% { opacity: 1; transform: scale(0.92); }
+}
+
+@keyframes tl-roots-growth {
+  0% { opacity: 0.2; transform: scaleY(0.35); transform-origin: 200px 354px; }
+  9%, 85% { opacity: 1; transform: scaleY(1); }
+  94% { opacity: 0.5; }
+  99%, 100% { opacity: 0.2; transform: scaleY(0.35); }
+}
+
+.tl-seed-system { animation: tl-seed-cycle 20s infinite ease-in-out; }
+.tl-roots { animation: tl-roots-growth 20s infinite ease-in-out; }
+
+/* Layer 3: Young Sprout Shoot */
+@keyframes tl-sprout-cycle {
+  0%, 8% { opacity: 0; transform: scaleY(0); transform-origin: 200px 320px; }
+  12% { opacity: 0.95; transform: scaleY(0.7); }
+  18% { opacity: 1; transform: scaleY(1); }
+  24% { opacity: 0.5; transform: scaleY(1.05); }
+  28%, 100% { opacity: 0; transform: scaleY(1.1); }
+}
+
+.tl-sprout-shoot { animation: tl-sprout-cycle 20s infinite ease-in-out; }
+
+/* Layer 4: Trunk & Architectural Branches */
+@keyframes tl-trunk-cycle {
+  0%, 14% { opacity: 0; transform: scaleY(0.18); transform-origin: 200px 320px; }
+  20% { opacity: 0.7; transform: scaleY(0.65); }
+  26% { opacity: 1; transform: scaleY(1); }
+  82% { opacity: 1; transform: scale(1); }
+  88% { opacity: 0.85; }
+  95% { opacity: 0.35; }
+  98.5%, 100% { opacity: 0; transform: scaleY(0.18); }
+}
+
+.tl-trunk-tree { animation: tl-trunk-cycle 20s infinite ease-in-out; }
+
+/* Layer 5: Mature Green Foliage Canopy */
+@keyframes tl-mature-canopy-cycle {
+  0%, 20% { opacity: 0; transform: scale(0.35) rotate(-0.4deg); transform-origin: 200px 140px; }
+  26% { opacity: 0.7; transform: scale(0.75); }
+  34% { opacity: 1; transform: scale(1); }
+  42% { opacity: 1; transform: scale(1.01) rotate(0.6deg); }
+  50% { opacity: 1; transform: scale(1) rotate(-0.5deg); }
+  54% { opacity: 0.85; }
+  63% { opacity: 0; transform: scale(0.98); }
+  64%, 100% { opacity: 0; }
+}
+
+.tl-canopy-mature { animation: tl-mature-canopy-cycle 20s infinite ease-in-out; }
+
+/* Layer 6: Autumn Foliage Canopy Shift */
+@keyframes tl-autumn-canopy-cycle {
+  0%, 50% { opacity: 0; transform: scale(1); transform-origin: 200px 140px; }
+  54% { opacity: 0.65; transform: scale(1); }
+  60% { opacity: 1; transform: scale(1); }
+  66% { opacity: 0.7; transform: scale(0.98); }
+  72% { opacity: 0; transform: scale(0.94); }
+  73%, 100% { opacity: 0; }
+}
+
+.tl-canopy-autumn { animation: tl-autumn-canopy-cycle 20s infinite ease-in-out; }
+
+/* Layer 7: Falling Autumn Leaves */
+@keyframes tl-leaf-drop-1 {
+  0%, 56% { opacity: 0; transform: translate(110px, 150px) rotate(0deg); }
+  58% { opacity: 0.95; transform: translate(110px, 150px) rotate(15deg); }
+  64% { opacity: 1; transform: translate(118px, 215px) rotate(70deg); }
+  70% { opacity: 0.9; transform: translate(112px, 275px) rotate(135deg); }
+  74% { opacity: 0.8; transform: translate(122px, 319px) rotate(180deg); }
+  84% { opacity: 0.65; transform: translate(122px, 319px) rotate(180deg); }
+  88%, 100% { opacity: 0; transform: translate(122px, 319px) rotate(180deg); }
+}
+
+@keyframes tl-leaf-drop-2 {
+  0%, 58% { opacity: 0; transform: translate(250px, 125px) rotate(0deg); }
+  60% { opacity: 0.95; transform: translate(250px, 125px) rotate(-15deg); }
+  66% { opacity: 1; transform: translate(262px, 195px) rotate(-75deg); }
+  72% { opacity: 0.9; transform: translate(252px, 265px) rotate(-145deg); }
+  76% { opacity: 0.8; transform: translate(265px, 320px) rotate(-195deg); }
+  85% { opacity: 0.65; transform: translate(265px, 320px) rotate(-195deg); }
+  89%, 100% { opacity: 0; transform: translate(265px, 320px) rotate(-195deg); }
+}
+
+@keyframes tl-leaf-drop-3 {
+  0%, 59% { opacity: 0; transform: translate(195px, 75px) rotate(0deg); }
+  61% { opacity: 0.95; transform: translate(195px, 75px) rotate(25deg); }
+  67% { opacity: 1; transform: translate(182px, 160px) rotate(90deg); }
+  73% { opacity: 0.9; transform: translate(198px, 250px) rotate(170deg); }
+  77% { opacity: 0.8; transform: translate(185px, 320px) rotate(220deg); }
+  86% { opacity: 0.65; transform: translate(185px, 320px) rotate(220deg); }
+  90%, 100% { opacity: 0; transform: translate(185px, 320px) rotate(220deg); }
+}
+
+@keyframes tl-leaf-drop-4 {
+  0%, 61% { opacity: 0; transform: translate(285px, 140px) rotate(0deg); }
+  63% { opacity: 0.95; transform: translate(285px, 140px) rotate(-30deg); }
+  69% { opacity: 1; transform: translate(272px, 215px) rotate(-95deg); }
+  75% { opacity: 0.9; transform: translate(282px, 280px) rotate(-160deg); }
+  78% { opacity: 0.8; transform: translate(276px, 320px) rotate(-210deg); }
+  85% { opacity: 0.65; transform: translate(276px, 320px) rotate(-210deg); }
+  89%, 100% { opacity: 0; transform: translate(276px, 320px) rotate(-210deg); }
+}
+
+@keyframes tl-leaf-drop-5 {
+  0%, 60% { opacity: 0; transform: translate(150px, 140px) rotate(0deg); }
+  62% { opacity: 0.95; transform: translate(150px, 140px) rotate(20deg); }
+  68% { opacity: 1; transform: translate(162px, 205px) rotate(75deg); }
+  74% { opacity: 0.9; transform: translate(150px, 275px) rotate(145deg); }
+  78% { opacity: 0.8; transform: translate(160px, 320px) rotate(190deg); }
+  85% { opacity: 0.65; transform: translate(160px, 320px) rotate(190deg); }
+  89%, 100% { opacity: 0; transform: translate(160px, 320px) rotate(190deg); }
+}
+
+.tl-leaf-fall-1 { animation: tl-leaf-drop-1 20s infinite ease-in-out; }
+.tl-leaf-fall-2 { animation: tl-leaf-drop-2 20s infinite ease-in-out; }
+.tl-leaf-fall-3 { animation: tl-leaf-drop-3 20s infinite ease-in-out; }
+.tl-leaf-fall-4 { animation: tl-leaf-drop-4 20s infinite ease-in-out; }
+.tl-leaf-fall-5 { animation: tl-leaf-drop-5 20s infinite ease-in-out; }
+
+/* Layer 8: Ground Leaf Mulch */
+@keyframes tl-soil-mulch-cycle {
+  0%, 64% { opacity: 0; transform: scaleY(0.4); transform-origin: 200px 321px; }
+  68% { opacity: 0.6; transform: scaleY(0.85); }
+  74% { opacity: 0.95; transform: scaleY(1); }
+  84% { opacity: 0.9; }
+  92% { opacity: 0.5; }
+  98%, 100% { opacity: 0; }
+}
+
+.tl-soil-mulch { animation: tl-soil-mulch-cycle 20s infinite ease-in-out; }
+
+/* Layer 9: New Renewal Sprout */
+@keyframes tl-renewal-sprout-cycle {
+  0%, 82% { opacity: 0; transform: scaleY(0); transform-origin: 238px 320px; }
+  86% { opacity: 0.8; transform: scaleY(0.7); }
+  90% { opacity: 1; transform: scaleY(1); }
+  95% { opacity: 0.9; transform: scaleY(1.05); }
+  98% { opacity: 0.4; transform: scaleY(1.1); }
+  100% { opacity: 0; }
+}
+
+.tl-renewal-sprout { animation: tl-renewal-sprout-cycle 20s infinite ease-in-out; }
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .tree-lifecycle-pulse,
+  .tl-seed-system,
+  .tl-roots,
+  .tl-sprout-shoot,
+  .tl-trunk-tree,
+  .tl-canopy-mature,
+  .tl-canopy-autumn,
+  .tl-leaf-fall-1,
+  .tl-leaf-fall-2,
+  .tl-leaf-fall-3,
+  .tl-leaf-fall-4,
+  .tl-leaf-fall-5,
+  .tl-soil-mulch,
+  .tl-renewal-sprout,
+  .lifecycle-phase-text {
+    animation: none !important;
+  }
+
+  /* Show healthy mature tree and vibrant renewal sprout statically */
+  .tl-trunk-tree {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .tl-canopy-mature {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .tl-renewal-sprout {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .tl-seed-system {
+    opacity: 0.8 !important;
+    transform: none !important;
+  }
+  .tl-roots {
+    opacity: 0.9 !important;
+    transform: none !important;
+  }
+  .tl-canopy-autumn,
+  .tl-sprout-shoot,
+  .tl-falling-foliage,
+  .tl-soil-mulch {
+    display: none !important;
+  }
+  .lifecycle-phase-text {
+    display: none !important;
+  }
+  .lifecycle-phase-text.phase-reduced-motion {
+    display: inline-block !important;
+    opacity: 1 !important;
+  }
+}
+

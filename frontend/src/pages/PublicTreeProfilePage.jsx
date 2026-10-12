@@ -64,7 +64,7 @@ export default function PublicTreeProfilePage() {
         <div className="text-center pt-2">
           <Link
             to="/map"
-            className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-emerald-400 transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs text-charcoal-600 hover:text-forest-900 transition-colors font-medium"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Return to Interactive Map</span>
@@ -80,16 +80,16 @@ export default function PublicTreeProfilePage() {
       <div className="flex items-center justify-between">
         <Link
           to="/map"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-emerald-400 transition-colors"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-charcoal-600 hover:text-forest-900 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Map View</span>
         </Link>
-        <span className="text-xs font-mono text-slate-500">Public Registry View</span>
+        <span className="text-xs font-mono text-charcoal-500 uppercase tracking-wider">Public Registry View</span>
       </div>
 
       {/* Main Grid: Profile (Left) + QR Code (Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         <div className="lg:col-span-7">
           <TreeProfileCard tree={tree} />
         </div>
