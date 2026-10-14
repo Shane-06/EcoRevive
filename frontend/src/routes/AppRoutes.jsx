@@ -26,6 +26,9 @@ import MonitorPage from '../pages/MonitorPage';
 import AdminVerificationsPage from '../pages/AdminVerificationsPage';
 import AdminDashboardPage from '../pages/AdminDashboardPage';
 
+// AI Assistant Pages (V2-M2)
+import EcoGuidePage from '../pages/EcoGuidePage';
+
 export default function AppRoutes() {
   return (
     <Routes>
@@ -55,7 +58,7 @@ export default function AppRoutes() {
           <Route path="/dashboard" element={<DashboardPage />} />
         </Route>
 
-        {/* Authenticated Rewards Route (All Authenticated Users) */}
+        {/* Authenticated All-User Routes (Rewards & EcoGuide) */}
         <Route
           element={
             <ProtectedRoute>
@@ -64,6 +67,7 @@ export default function AppRoutes() {
           }
         >
           <Route path="/rewards" element={<RewardsPage />} />
+          <Route path="/ecoguide" element={<EcoGuidePage />} />
         </Route>
 
         {/* Authenticated Caretaker Routes */}

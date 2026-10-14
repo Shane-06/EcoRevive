@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { ROLES } from '../../utils/constants';
-import { Sprout, Menu, X, LogOut, User, Shield, Trees, MapPin, QrCode, Award, LayoutDashboard } from 'lucide-react';
+import { Sprout, Menu, X, LogOut, User, Shield, Trees, MapPin, QrCode, Award, LayoutDashboard, Sparkles } from 'lucide-react';
 
 export default function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -85,6 +85,12 @@ export default function Navbar() {
 
             {isAuthenticated && (
               <>
+                <NavLink to="/ecoguide" className={navLinkClass}>
+                  <span className="flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-emerald-600" /> EcoGuide
+                  </span>
+                </NavLink>
+
                 {user?.role === ROLES.CONTRIBUTOR && (
                   <>
                     <NavLink to="/trees" className={navLinkClass}>
@@ -191,6 +197,10 @@ export default function Navbar() {
 
           {isAuthenticated && (
             <>
+              <NavLink to="/ecoguide" className={mobileNavLinkClass} onClick={() => setMobileMenuOpen(false)}>
+                <Sparkles className="w-4 h-4 text-emerald-600" /> EcoGuide
+              </NavLink>
+
               {user?.role === ROLES.CONTRIBUTOR && (
                 <>
                   <NavLink to="/trees" className={mobileNavLinkClass} onClick={() => setMobileMenuOpen(false)}>

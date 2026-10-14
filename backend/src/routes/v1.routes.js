@@ -9,6 +9,7 @@ const adminRoutes = require('./admin.routes');
 const publicRoutes = require('./public.routes');
 const rewardRoutes = require('./reward.routes');
 const dashboardRoutes = require('./dashboard.routes');
+const aiRoutes = require('./ai.routes');
 
 const router = Router();
 
@@ -72,4 +73,11 @@ router.use('/rewards', rewardRoutes);
  */
 router.use('/dashboard', dashboardRoutes);
 
+/**
+ * AI & EcoGuide routes under API v1
+ * @route /api/v1/ai
+ */
+router.use('/ai', aiRoutes);
+
 module.exports = router;
+

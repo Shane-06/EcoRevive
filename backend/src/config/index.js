@@ -36,6 +36,14 @@ const config = {
       timeoutMs: parseInt(process.env.PROVIDER_TIMEOUT_MS || '5000', 10),
     },
   },
+  ai: {
+    provider: process.env.AI_PROVIDER || 'mock',
+    apiKey: process.env.GEMINI_API_KEY || '',
+    timeoutMs: parseInt(process.env.AI_TIMEOUT_MS || '10000', 10),
+    overallDeadlineMs: parseInt(process.env.AI_OVERALL_DEADLINE_MS || '25000', 10),
+    primaryModel: 'gemini-3.8-flash',
+    fallbackModel: 'gemini-3.5-flash-lite',
+  },
 };
 
 module.exports = config;

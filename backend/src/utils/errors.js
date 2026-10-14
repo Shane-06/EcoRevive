@@ -66,6 +66,24 @@ class ValidationError extends AppError {
   }
 }
 
+class RateLimitExceededError extends AppError {
+  constructor(message = 'Too many requests. Please try again later.', codeOrDetails = 'RATE_LIMIT_EXCEEDED', details = null) {
+    const resolved = resolveCodeAndDetails('RATE_LIMIT_EXCEEDED', codeOrDetails, details);
+    super(message, 429, resolved.code, resolved.details);
+  }
+}
+
+class ProviderUnavailableError extends AppError {
+  constructor(
+    message = 'EcoGuide assistant free tier quota is temporarily unavailable. Please try again shortly.',
+    codeOrDetails = 'PROVIDER_UNAVAILABLE',
+    details = null
+  ) {
+    const resolved = resolveCodeAndDetails('PROVIDER_UNAVAILABLE', codeOrDetails, details);
+    super(message, 503, resolved.code, resolved.details);
+  }
+}
+
 module.exports = {
   AppError,
   BadRequestError,
@@ -74,4 +92,6 @@ module.exports = {
   NotFoundError,
   ConflictError,
   ValidationError,
+  RateLimitExceededError,
+  ProviderUnavailableError,
 };

@@ -10,7 +10,8 @@
     "test:db": "jest src/tests/db.test.js src/tests/spatial.test.js --runInBand",
     "lint": "eslint .",
     "db:migrate": "node ../database/migrate.js",
-    "db:seed": "node ../database/seed.js"
+    "db:seed": "node ../database/seed.js",
+    "db:ingest": "node ../database/ingestKnowledge.js"
   },
   "keywords": [
     "ecorevive",
