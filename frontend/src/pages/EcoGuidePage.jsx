@@ -9,16 +9,17 @@ import {
   User,
   ShieldCheck,
   HelpCircle,
+  Database,
 } from 'lucide-react';
 import aiService from '../services/ai.service';
 import ErrorAlert from '../components/common/ErrorAlert';
 
 const PROMPT_SUGGESTIONS = [
   'How does the 9-stage plantation lifecycle work?',
+  'Can you give me a summary of my plantations?',
   'How is a permanent Tree ID generated and verified?',
   'What soil pH and texture are optimal for planting?',
   'What are the 4 authoritative tree health statuses?',
-  'What is the 30-day monitoring completeness interval?',
 ];
 
 export default function EcoGuidePage() {
@@ -209,25 +210,49 @@ export default function EcoGuidePage() {
                     <p className="whitespace-pre-wrap">{msg.content}</p>
                   </div>
 
-                  {/* Knowledge Source Citations */}
+                  {/* Approved Knowledge & Live Data Source Citations */}
                   {!isUser && msg.sources && msg.sources.length > 0 && (
                     <div className="p-3 bg-white border border-warm-200 rounded-xl space-y-2 shadow-subtle">
                       <div className="flex items-center gap-1.5 text-[11px] font-semibold text-charcoal-700 uppercase tracking-wider font-mono">
                         <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
-                        Approved Knowledge Sources ({msg.sources.length}):
+                        Approved Sources & Verified Evidence ({msg.sources.length}):
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {msg.sources.map((src, sIdx) => (
-                          <div
-                            key={sIdx}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-warm-100 border border-warm-300 rounded-lg text-xs text-charcoal-800"
-                            title={`Document: ${src.title} | Section: ${src.section}`}
-                          >
-                            <ShieldCheck className="w-3 h-3 text-emerald-600 shrink-0" />
-                            <span className="font-semibold text-charcoal-900">{src.section}</span>
-                            <span className="text-[10px] text-charcoal-500 font-mono">v{src.version}</span>
-                          </div>
-                        ))}
+                        {msg.sources.map((src, sIdx) => {
+                          const isLive = src.type === 'live_data';
+                          return (
+                            <div
+                              key={sIdx}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border ${
+                                isLive
+                                  ? 'bg-purple-50/90 border-purple-200 text-purple-900'
+                                  : 'bg-warm-100 border-warm-300 text-charcoal-800'
+                              }`}
+                              title={
+                                isLive
+                                  ? `Live Platform Data: ${src.title || src.tool}`
+                                  : `Document: ${src.title} | Section: ${src.section}`
+                              }
+                            >
+                              {isLive ? (
+                                <Database className="w-3 h-3 text-purple-700 shrink-0" />
+                              ) : (
+                                <ShieldCheck className="w-3 h-3 text-emerald-600 shrink-0" />
+                              )}
+                              <span className="font-semibold text-charcoal-900">
+                                {isLive ? src.title || src.tool : src.section}
+                              </span>
+                              {src.version && (
+                                <span className="text-[10px] text-charcoal-500 font-mono">v{src.version}</span>
+                              )}
+                              {src.entityId && (
+                                <span className="text-[10px] text-purple-800 font-mono font-bold bg-purple-100/80 px-1 py-0.5 rounded">
+                                  {src.entityId}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}

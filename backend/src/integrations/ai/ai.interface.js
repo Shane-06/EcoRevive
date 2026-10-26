@@ -11,6 +11,7 @@ class AiProvider {
    * @param {object} params
    * @param {string} [params.systemPrompt] - Privileged non-overridable system instructions
    * @param {Array<{role: 'user'|'assistant', content: string}>} params.messages - Formatted conversation history and user query
+   * @param {Array<object>} [params.tools] - Optional tool definitions (function declarations)
    * @param {number} [params.temperature=0.7] - Sampling temperature
    * @param {number} [params.maxTokens=800] - Strict output token limit
    * @param {AbortSignal} [params.signal] - Cancellation signal (e.g., from client disconnect or master deadline)
@@ -18,6 +19,7 @@ class AiProvider {
    *   content: string,
    *   model: string,
    *   fallbackUsed: boolean,
+   *   toolCalls?: Array<{ name: string, args: object }>,
    *   usage?: { promptTokens: number, completionTokens: number, totalTokens: number },
    *   finishReason?: string,
    *   costIncurred: string

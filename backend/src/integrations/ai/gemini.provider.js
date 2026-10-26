@@ -48,11 +48,12 @@ class GeminiAiProvider extends AiProvider {
    * @param {object} params
    * @param {string} [params.systemPrompt]
    * @param {Array<{role: string, content: string}>} [params.messages]
+   * @param {Array<object>} [params.tools]
    * @param {number} [params.temperature=0.7]
    * @param {number} [params.maxTokens=800]
    * @returns {object} Formatted payload
    */
-  formatGeminiRequest({ systemPrompt, messages = [], temperature = 0.7, maxTokens = 800 }) {
+  formatGeminiRequest({ systemPrompt, messages = [], tools = [], temperature = 0.7, maxTokens = 800 }) {
     const contents = [];
 
     if (Array.isArray(messages)) {
@@ -77,6 +78,18 @@ class GeminiAiProvider extends AiProvider {
       payload.systemInstruction = {
         parts: [{ text: systemPrompt.trim() }],
       };
+    }
+
+    if (Array.isArray(tools) && tools.length > 0) {
+      payload.tools = [
+        {
+          functionDeclarations: tools.map((t) => ({
+            name: t.name,
+            description: t.description,
+            parameters: t.parameters,
+          })),
+        },
+      ];
     }
 
     return payload;
@@ -151,10 +164,19 @@ class GeminiAiProvider extends AiProvider {
 
       const json = await response.json();
       const candidate = json.candidates?.[0];
-      const text = candidate?.content?.parts?.map(p => p.text).join('') || '';
+      const parts = candidate?.content?.parts || [];
+      const text = parts.filter(p => p.text).map(p => p.text).join('');
+      const functionCallParts = parts.filter(p => p.functionCall);
+      let toolCalls = undefined;
+      if (functionCallParts.length > 0) {
+        toolCalls = functionCallParts.map(p => ({
+          name: p.functionCall.name,
+          args: p.functionCall.args || {},
+        }));
+      }
       const finishReason = candidate?.finishReason;
 
-      if (!text && !finishReason) {
+      if (!text && !finishReason && (!toolCalls || toolCalls.length === 0)) {
         const malformedErr = new Error('Provider returned malformed candidate payload');
         malformedErr.isMalformed = true;
         malformedErr.statusCode = 502;
@@ -172,8 +194,9 @@ class GeminiAiProvider extends AiProvider {
       return {
         content: text,
         model,
+        toolCalls,
         usage,
-        finishReason: finishReason || 'STOP',
+        finishReason: finishReason || (toolCalls ? 'TOOL_CALL' : 'STOP'),
         costIncurred: '$0.00',
       };
     } catch (err) {
@@ -276,15 +299,16 @@ class GeminiAiProvider extends AiProvider {
    * @param {object} params
    * @param {string} [params.systemPrompt]
    * @param {Array<{role: string, content: string}>} [params.messages]
+   * @param {Array<object>} [params.tools]
    * @param {number} [params.temperature=0.7]
    * @param {number} [params.maxTokens=800]
    * @param {AbortSignal} [params.signal] - Cancellation signal
    * @returns {Promise<object>}
    */
-  async generateChatResponse({ systemPrompt, messages = [], temperature = 0.7, maxTokens = 800, signal }) {
+  async generateChatResponse({ systemPrompt, messages = [], tools = [], temperature = 0.7, maxTokens = 800, signal }) {
     const startTime = Date.now();
     const deadline = startTime + this.overallDeadlineMs;
-    const payload = this.formatGeminiRequest({ systemPrompt, messages, temperature, maxTokens });
+    const payload = this.formatGeminiRequest({ systemPrompt, messages, tools, temperature, maxTokens });
 
     // Step 1: Primary Attempt 1 (gemini-3.8-flash)
     let remainingMs = deadline - Date.now();
