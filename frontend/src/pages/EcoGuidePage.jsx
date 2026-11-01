@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   HelpCircle,
   Database,
+  Activity,
 } from 'lucide-react';
 import aiService from '../services/ai.service';
 import ErrorAlert from '../components/common/ErrorAlert';
@@ -219,35 +220,52 @@ export default function EcoGuidePage() {
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {msg.sources.map((src, sIdx) => {
+                          const isHealthInsight = src.type === 'health_insight';
                           const isLive = src.type === 'live_data';
                           return (
                             <div
                               key={sIdx}
                               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border ${
-                                isLive
+                                isHealthInsight
+                                  ? 'bg-teal-50 border-teal-200 text-teal-900'
+                                  : isLive
                                   ? 'bg-purple-50/90 border-purple-200 text-purple-900'
                                   : 'bg-warm-100 border-warm-300 text-charcoal-800'
                               }`}
                               title={
-                                isLive
+                                isHealthInsight
+                                  ? `Tree Health Intelligence: ${src.title || src.treeId}`
+                                  : isLive
                                   ? `Live Platform Data: ${src.title || src.tool}`
                                   : `Document: ${src.title} | Section: ${src.section}`
                               }
                             >
-                              {isLive ? (
+                              {isHealthInsight ? (
+                                <Activity className="w-3 h-3 text-teal-700 shrink-0" />
+                              ) : isLive ? (
                                 <Database className="w-3 h-3 text-purple-700 shrink-0" />
                               ) : (
                                 <ShieldCheck className="w-3 h-3 text-emerald-600 shrink-0" />
                               )}
                               <span className="font-semibold text-charcoal-900">
-                                {isLive ? src.title || src.tool : src.section}
+                                {isHealthInsight
+                                  ? src.title || 'Health Insight'
+                                  : isLive
+                                  ? src.title || src.tool
+                                  : src.section}
                               </span>
                               {src.version && (
                                 <span className="text-[10px] text-charcoal-500 font-mono">v{src.version}</span>
                               )}
-                              {src.entityId && (
-                                <span className="text-[10px] text-purple-800 font-mono font-bold bg-purple-100/80 px-1 py-0.5 rounded">
-                                  {src.entityId}
+                              {(src.entityId || src.treeId) && (
+                                <span
+                                  className={`text-[10px] font-mono font-bold px-1 py-0.5 rounded ${
+                                    isHealthInsight
+                                      ? 'bg-teal-100/90 text-teal-900'
+                                      : 'bg-purple-100/80 text-purple-800'
+                                  }`}
+                                >
+                                  {src.entityId || src.treeId}
                                 </span>
                               )}
                             </div>

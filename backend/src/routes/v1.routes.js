@@ -10,6 +10,7 @@ const publicRoutes = require('./public.routes');
 const rewardRoutes = require('./reward.routes');
 const dashboardRoutes = require('./dashboard.routes');
 const aiRoutes = require('./ai.routes');
+const healthIntelligenceRoutes = require('./healthIntelligence.routes');
 
 const router = Router();
 
@@ -78,6 +79,12 @@ router.use('/dashboard', dashboardRoutes);
  * @route /api/v1/ai
  */
 router.use('/ai', aiRoutes);
+
+/**
+ * Tree Health Intelligence routes under API v1
+ * @route /api/v1/health-intelligence
+ */
+router.use('/health-intelligence', healthIntelligenceRoutes);
 
 module.exports = router;
 

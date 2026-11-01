@@ -267,6 +267,29 @@ class MockAiProvider extends AiProvider {
         };
       }
 
+      if (userText.includes('getTreeHealthInsight')) {
+        let content = 'Authorized health intelligence has been retrieved for this tree.';
+        if (userText.includes('"found": false')) {
+          content = 'I checked verified platform records, and health intelligence records for the specified tree were not found or you are not authorized to view them.';
+        } else if (userText.includes('"trend":')) {
+          const trendMatch = userText.match(/"trend":\s*"([^"]+)"/);
+          const statusMatch = userText.match(/"latestStatus":\s*"([^"]+)"/);
+          const treeIdMatch = userText.match(/"treeId":\s*"([^"]+)"/);
+          const trend = trendMatch ? trendMatch[1] : 'stable';
+          const status = statusMatch ? statusMatch[1] : 'Healthy';
+          const treeId = treeIdMatch ? treeIdMatch[1] : 'ER-PLT';
+          content = `The latest health intelligence record for tree ${treeId} indicates a ${trend} trend. The latest recorded health status is ${status}.`;
+        }
+        return {
+          content,
+          model: this.modelName,
+          fallbackUsed: false,
+          usage: { promptTokens: 40, completionTokens: 25, totalTokens: 65 },
+          finishReason: 'STOP',
+          costIncurred: '$0.00',
+        };
+      }
+
       if (userText.includes('getPlatformVerificationSummary')) {
         const content = 'According to platform verification metrics, the platform-wide plantation summary has been retrieved.';
         return {
@@ -326,6 +349,22 @@ class MockAiProvider extends AiProvider {
       const treeMatch = actualQuery.match(/(ER-PLT-[0-9]{5}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
       if (treeMatch) {
         const treeId = treeMatch[1];
+        const isInsightQuery =
+          lowerQuery.includes('trend') ||
+          lowerQuery.includes('insight') ||
+          lowerQuery.includes('intelligence');
+
+        if (isInsightQuery && tools.some(t => t.name === 'getTreeHealthInsight')) {
+          return {
+            content: '',
+            model: this.modelName,
+            fallbackUsed: false,
+            toolCalls: [{ name: 'getTreeHealthInsight', args: { treeId } }],
+            finishReason: 'TOOL_CALL',
+            costIncurred: '$0.00',
+          };
+        }
+
         const isHealthQuery =
           lowerQuery.includes('health') ||
           lowerQuery.includes('observation') ||

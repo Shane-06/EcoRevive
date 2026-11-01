@@ -44,6 +44,9 @@ const config = {
     primaryModel: 'gemini-3.8-flash',
     fallbackModel: 'gemini-3.5-flash-lite',
   },
+  healthIntelligence: {
+    monitoringIntervalDays: parseInt(process.env.HEALTH_MONITORING_INTERVAL_DAYS || '30', 10),
+  },
 };
 
 module.exports = config;

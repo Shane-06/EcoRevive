@@ -345,5 +345,43 @@ describe('Frontend V2-M2 — EcoGuide Knowledge Assistant', () => {
       expect(screen.getByText(/Limited Knowledge Match: Question is outside approved EcoRevive documentation/i)).toBeInTheDocument();
     });
   });
+
+  it('should render tree health intelligence source citation with distinct health insight pill', async () => {
+    storage.setItem(STORAGE_KEYS.TOKEN, 'mock-jwt-token');
+    storage.setItem(STORAGE_KEYS.USER, {
+      id: 'u1',
+      name: 'Eco Contributor',
+      email: 'contributor@example.com',
+      role: 'contributor',
+    });
+
+    const mockResponse = {
+      answer: 'The latest health intelligence record for tree ER-PLT-00001 indicates a worsening trend.',
+      sources: [
+        {
+          type: 'health_insight',
+          treeId: 'ER-PLT-00001',
+          title: 'Tree Health Intelligence Record',
+        },
+      ],
+      status: 'success',
+    };
+
+    vi.spyOn(aiService, 'sendMessage').mockResolvedValue(mockResponse);
+
+    renderWithRouter('/ecoguide');
+
+    const input = await screen.findByTestId('ecoguide-input');
+    const sendButton = screen.getByTestId('ecoguide-send');
+
+    fireEvent.change(input, { target: { value: 'Explain health trend for ER-PLT-00001' } });
+    fireEvent.click(sendButton);
+
+    await waitFor(() => {
+      expect(screen.getByText(/latest health intelligence record for tree ER-PLT-00001/i)).toBeInTheDocument();
+      expect(screen.getByText('Tree Health Intelligence Record')).toBeInTheDocument();
+      expect(screen.getByText('ER-PLT-00001')).toBeInTheDocument();
+    });
+  });
 });
 

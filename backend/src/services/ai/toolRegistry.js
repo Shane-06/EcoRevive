@@ -112,6 +112,37 @@ const TOOL_DEFINITIONS = {
       return {};
     },
   },
+
+  getTreeHealthInsight: {
+    name: 'getTreeHealthInsight',
+    description:
+      'Retrieves deterministic health intelligence analysis (trend classification, monitoring freshness, and follow-up recommendations) for a verified tree by its public Tree ID (ER-PLT-XXXXX) or UUID. Only returns verified trees.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        treeId: {
+          type: 'STRING',
+          description: 'The public Tree ID (e.g., ER-PLT-00001) or tree UUID.',
+        },
+      },
+      required: ['treeId'],
+    },
+    allowedRoles: ['contributor', 'caretaker', 'admin'],
+    validateArgs: (args) => {
+      if (!args || typeof args !== 'object') {
+        throw new Error('Arguments must be an object with treeId.');
+      }
+      const { treeId } = args;
+      if (!treeId || typeof treeId !== 'string') {
+        throw new Error('Parameter "treeId" is required and must be a string.');
+      }
+      const trimmed = treeId.trim();
+      if (!TREE_ID_OR_UUID_REGEX.test(trimmed)) {
+        throw new Error(`Invalid treeId "${trimmed}". Format must be ER-PLT-XXXXX (e.g. ER-PLT-00001) or a valid UUID.`);
+      }
+      return { treeId: trimmed };
+    },
+  },
 };
 
 /**

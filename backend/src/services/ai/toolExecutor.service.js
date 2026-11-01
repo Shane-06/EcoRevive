@@ -3,6 +3,7 @@ const treeRepository = require('../../repositories/tree.repository');
 const treeHealthRepository = require('../../repositories/treeHealth.repository');
 const identityRepository = require('../../repositories/identity.repository');
 const dashboardRepository = require('../../repositories/dashboard.repository');
+const healthIntelligenceService = require('../healthIntelligence/healthIntelligence.service');
 const { query } = require('../../config/db');
 
 // Bounds enforced by freeze record
@@ -15,6 +16,7 @@ class ToolExecutorService {
     this.treeHealthRepository = options.treeHealthRepository || treeHealthRepository;
     this.identityRepository = options.identityRepository || identityRepository;
     this.dashboardRepository = options.dashboardRepository || dashboardRepository;
+    this.healthIntelligenceService = options.healthIntelligenceService || healthIntelligenceService;
     this.query = options.query || query;
   }
 
@@ -113,6 +115,8 @@ class ToolExecutorService {
         return this._executeGetVerifiedTreeStatus(args.treeId);
       case 'getTreeHealthSummary':
         return this._executeGetTreeHealthSummary(args.treeId);
+      case 'getTreeHealthInsight':
+        return this._executeGetTreeHealthInsight(args.treeId, userContext);
       case 'getPlatformVerificationSummary':
         return this._executeGetPlatformVerificationSummary(userContext);
       default:
@@ -311,6 +315,50 @@ class ToolExecutorService {
         entityId: null,
       },
     };
+  }
+
+  /**
+   * Handler for getTreeHealthInsight: Deterministic health trend, freshness, and suggestions.
+   * @private
+   */
+  async _executeGetTreeHealthInsight(treeId, userContext) {
+    try {
+      const insight = await this.healthIntelligenceService.getTreeInsight({
+        treeIdentifier: treeId,
+        user: userContext,
+      });
+
+      return {
+        success: true,
+        data: {
+          found: true,
+          ...insight,
+        },
+        sourceAttribution: {
+          type: 'health_insight',
+          sourceId: 'TOOL-HEALTH-INSIGHT',
+          title: 'Tree Health Intelligence Record',
+          tool: 'getTreeHealthInsight',
+          entityId: insight.treeId,
+        },
+      };
+    } catch {
+      return {
+        success: true,
+        data: {
+          found: false,
+          treeId,
+          message: `Verified tree health insight for identifier "${treeId}" not found or unauthorized.`,
+        },
+        sourceAttribution: {
+          type: 'health_insight',
+          sourceId: 'TOOL-HEALTH-INSIGHT',
+          title: 'Tree Health Intelligence Record',
+          tool: 'getTreeHealthInsight',
+          entityId: treeId,
+        },
+      };
+    }
   }
 }
 
