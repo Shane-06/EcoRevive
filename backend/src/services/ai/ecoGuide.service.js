@@ -4,6 +4,15 @@ const toolExecutor = require('./toolExecutor.service');
 const { getFunctionDeclarations } = require('./toolRegistry');
 const { getAiProvider } = require('../../integrations/ai');
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function sanitizePublicEntityId(id) {
+  if (!id || typeof id !== 'string') return null;
+  const trimmed = id.trim();
+  if (UUID_REGEX.test(trimmed)) return null;
+  return trimmed;
+}
+
 class EcoGuideService {
   constructor(options = {}) {
     this.knowledgeRepository = options.knowledgeRepository || knowledgeRepository;
@@ -13,8 +22,35 @@ class EcoGuideService {
   }
 
   /**
-   * Processes an incoming conversational query grounded in approved knowledge chunks
-   * and authorized read-only live platform data tools.
+   * Deduplicates citation sources by unique composite key.
+   *
+   * @param {Array<object>} sources
+   * @returns {Array<object>}
+   * @private
+   */
+  _deduplicateSources(sources = []) {
+    if (!Array.isArray(sources)) return [];
+    const seen = new Set();
+    const deduped = [];
+
+    for (const src of sources) {
+      if (!src) continue;
+      const key = src.type === 'knowledge'
+        ? `knowledge:${src.sourceId || src.source_id}:${src.section || src.section_heading}`
+        : `${src.type}:${src.tool || src.sourceId}:${src.entityId || src.treeId || 'default'}`;
+
+      if (!seen.has(key)) {
+        seen.add(key);
+        deduped.push(src);
+      }
+    }
+
+    return deduped;
+  }
+
+  /**
+   * Processes an incoming conversational query grounded in approved knowledge chunks,
+   * authorized read-only live platform data tools, and deterministic health intelligence.
    *
    * @param {object} params
    * @param {string} params.message - Raw user query
@@ -31,14 +67,16 @@ class EcoGuideService {
     // 2. Retrieve relevant approved knowledge passages via PostgreSQL full-text search
     const approvedChunks = await this.knowledgeRepository.searchApprovedChunks(validMessage, 4);
 
-    // 3. Format source attribution records
-    const sources = approvedChunks.map((chunk) => ({
-      type: 'knowledge',
-      sourceId: chunk.source_id,
-      title: chunk.document_title,
-      section: chunk.section_heading,
-      version: chunk.document_version,
-    }));
+    // 3. Format knowledge source attribution records
+    const knowledgeSources = this._deduplicateSources(
+      approvedChunks.map((chunk) => ({
+        type: 'knowledge',
+        sourceId: chunk.source_id,
+        title: chunk.document_title,
+        section: chunk.section_heading,
+        version: chunk.document_version,
+      }))
+    );
 
     // 4. Retrieve allowed tool declarations based on verified user role
     const tools = this.getFunctionDeclarations(user?.role);
@@ -65,6 +103,8 @@ class EcoGuideService {
       // Security Invariant: Bound tool calls per request to max 2 to prevent recursive loops
       const toolCallsToExecute = providerResponse.toolCalls.slice(0, 2);
       const executedPlatformData = [];
+      const toolSources = [];
+      let hasUnauthorizedError = false;
 
       for (const call of toolCallsToExecute) {
         const executionResult = await this.toolExecutor.executeTool(
@@ -73,19 +113,29 @@ class EcoGuideService {
           user
         );
 
+        if (executionResult.error === 'UNAUTHORIZED_TOOL' || executionResult.error === 'ACCESS_DENIED') {
+          hasUnauthorizedError = true;
+        }
+
         executedPlatformData.push({
           tool: call.name,
           success: executionResult.success,
           data: executionResult.data || { error: executionResult.error, message: executionResult.message },
         });
 
-        if (executionResult.sourceAttribution) {
-          sources.push({
-            type: 'live_data',
+        // Only cite sources for tools that were successfully executed and actually found data
+        if (executionResult.success && executionResult.data?.found !== false && executionResult.sourceAttribution) {
+          const isHealthInsight =
+            executionResult.sourceAttribution.type === 'health_insight' ||
+            executionResult.sourceAttribution.type === 'health_intelligence';
+
+          toolSources.push({
+            type: isHealthInsight ? 'health_intelligence' : 'live_data',
             sourceId: executionResult.sourceAttribution.sourceId,
             title: executionResult.sourceAttribution.title,
             tool: executionResult.sourceAttribution.tool,
-            entityId: executionResult.sourceAttribution.entityId,
+            entityId: sanitizePublicEntityId(executionResult.sourceAttribution.entityId),
+            treeId: sanitizePublicEntityId(executionResult.sourceAttribution.treeId || executionResult.sourceAttribution.entityId),
           });
         }
       }
@@ -106,6 +156,27 @@ class EcoGuideService {
         signal,
       });
 
+      if (hasUnauthorizedError) {
+        return {
+          answer: finalResponse.content,
+          sources: [],
+          status: 'unauthorized',
+        };
+      }
+
+      // Determine combined sources: include knowledge only when relevant to user query or synthesis
+      const combinedSources = [...toolSources];
+      const isKnowledgeRelevant =
+        approvedChunks.length > 0 &&
+        (/\b(why|recommend|recommendation|guideline|lifecycle|stage|suitability|soil|weather|schedule|interval|rule|protocol|standard|overdue)\b/i.test(validMessage) ||
+         /\b(guideline|standard|schedule|protocol|recommendation|stage|lifecycle)\b/i.test(finalResponse.content || ''));
+
+      if (isKnowledgeRelevant) {
+        combinedSources.push(...knowledgeSources);
+      }
+
+      const deduplicatedSources = this._deduplicateSources(combinedSources);
+
       const hasLiveSuccess = executedPlatformData.some((d) => d.success);
       const isInsufficientAnswer =
         finalResponse.content &&
@@ -113,8 +184,8 @@ class EcoGuideService {
 
       return {
         answer: finalResponse.content,
-        sources,
-        status: (hasLiveSuccess || sources.length > 0) && !isInsufficientAnswer ? 'success' : 'insufficient_information',
+        sources: deduplicatedSources,
+        status: (hasLiveSuccess || deduplicatedSources.length > 0) && !isInsufficientAnswer ? 'success' : 'insufficient_information',
       };
     }
 
@@ -126,8 +197,17 @@ class EcoGuideService {
         validMessage.trim()
       );
 
-    if (approvedChunks.length === 0 && !isCapabilityOrGreeting) {
+    if (isCapabilityOrGreeting) {
+      return {
+        answer: providerResponse.content,
+        sources: [],
+        status: 'success',
+      };
+    }
+
+    if (approvedChunks.length === 0) {
       const isKnownTopic =
+        validHistory.length > 0 ||
         lowerQuery.includes('lifecycle') ||
         lowerQuery.includes('stage') ||
         lowerQuery.includes('tree') ||
@@ -138,7 +218,13 @@ class EcoGuideService {
         lowerQuery.includes('soil') ||
         lowerQuery.includes('weather') ||
         lowerQuery.includes('role') ||
-        lowerQuery.includes('reward');
+        lowerQuery.includes('reward') ||
+        lowerQuery.includes('attention') ||
+        lowerQuery.includes('status') ||
+        lowerQuery.includes('overdue') ||
+        lowerQuery.includes('trend') ||
+        lowerQuery.includes('insight') ||
+        lowerQuery.includes('recommend');
 
       if (!isKnownTopic) {
         return {
@@ -155,10 +241,16 @@ class EcoGuideService {
       providerResponse.content &&
       providerResponse.content.includes('I do not have enough verified information in the EcoRevive knowledge base');
 
+    const isClarification =
+      providerResponse.content &&
+      /\b(which tree|multiple trees|please specify|would you like me to check)\b/i.test(providerResponse.content);
+
     return {
       answer: providerResponse.content,
-      sources,
-      status: (sources.length > 0 || isCapabilityOrGreeting) && !isInsufficientAnswer ? 'success' : 'insufficient_information',
+      sources: isInsufficientAnswer ? [] : knowledgeSources,
+      status: (knowledgeSources.length > 0 || isCapabilityOrGreeting || isClarification) && !isInsufficientAnswer
+        ? 'success'
+        : 'insufficient_information',
     };
   }
 }

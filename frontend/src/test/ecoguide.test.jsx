@@ -383,5 +383,130 @@ describe('Frontend V2-M2 — EcoGuide Knowledge Assistant', () => {
       expect(screen.getByText('ER-PLT-00001')).toBeInTheDocument();
     });
   });
+
+  it('should render standardized health_intelligence source type and omit Limited Knowledge Match banner', async () => {
+    storage.setItem(STORAGE_KEYS.TOKEN, 'mock-jwt-token');
+    storage.setItem(STORAGE_KEYS.USER, {
+      id: 'u1',
+      name: 'Eco Contributor',
+      email: 'contributor@example.com',
+      role: 'contributor',
+    });
+
+    const mockResponse = {
+      answer: 'Tree ER-PLT-00001 is overdue for inspection with a stable trend.',
+      sources: [
+        {
+          type: 'health_intelligence',
+          treeId: 'ER-PLT-00001',
+          title: 'Tree Health Intelligence Record',
+        },
+      ],
+      status: 'success',
+    };
+
+    vi.spyOn(aiService, 'sendMessage').mockResolvedValue(mockResponse);
+
+    renderWithRouter('/ecoguide');
+
+    const input = await screen.findByTestId('ecoguide-input');
+    const sendButton = screen.getByTestId('ecoguide-send');
+
+    fireEvent.change(input, { target: { value: 'Why is ER-PLT-00001 overdue?' } });
+    fireEvent.click(sendButton);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Tree ER-PLT-00001 is overdue for inspection/i)).toBeInTheDocument();
+      expect(screen.getByText('Tree Health Intelligence Record')).toBeInTheDocument();
+      expect(screen.getByText('ER-PLT-00001')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText(/Limited Knowledge Match/i)).not.toBeInTheDocument();
+  });
+
+  it('should render combined sources (knowledge, live_data, health_intelligence) simultaneously', async () => {
+    storage.setItem(STORAGE_KEYS.TOKEN, 'mock-jwt-token');
+    storage.setItem(STORAGE_KEYS.USER, {
+      id: 'u1',
+      name: 'Eco Contributor',
+      email: 'contributor@example.com',
+      role: 'contributor',
+    });
+
+    const mockResponse = {
+      answer: 'Combined response using platform facts, health intelligence, and approved guidelines.',
+      sources: [
+        {
+          type: 'health_intelligence',
+          treeId: 'ER-PLT-00001',
+          title: 'Tree Health Intelligence Record',
+        },
+        {
+          type: 'live_data',
+          tool: 'getVerifiedTreeStatus',
+          entityId: 'ER-PLT-00001',
+          title: 'Verified Tree Status Record',
+        },
+        {
+          type: 'knowledge',
+          title: 'Tree Health Monitoring Protocols',
+          section: '30-Day Monitoring Completeness & Trend Rules',
+          version: '2.0',
+        },
+      ],
+      status: 'success',
+    };
+
+    vi.spyOn(aiService, 'sendMessage').mockResolvedValue(mockResponse);
+
+    renderWithRouter('/ecoguide');
+
+    const input = await screen.findByTestId('ecoguide-input');
+    const sendButton = screen.getByTestId('ecoguide-send');
+
+    fireEvent.change(input, { target: { value: 'Complete report for ER-PLT-00001' } });
+    fireEvent.click(sendButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Tree Health Intelligence Record')).toBeInTheDocument();
+      expect(screen.getByText('Verified Tree Status Record')).toBeInTheDocument();
+      expect(screen.getByText('30-Day Monitoring Completeness & Trend Rules')).toBeInTheDocument();
+      expect(screen.getByText('v2.0')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText(/Limited Knowledge Match/i)).not.toBeInTheDocument();
+  });
+
+  it('should render access restricted warning when status is unauthorized', async () => {
+    storage.setItem(STORAGE_KEYS.TOKEN, 'mock-jwt-token');
+    storage.setItem(STORAGE_KEYS.USER, {
+      id: 'u1',
+      name: 'Eco Contributor',
+      email: 'contributor@example.com',
+      role: 'contributor',
+    });
+
+    const mockResponse = {
+      answer: 'I cannot retrieve this platform data because your current role is not authorized to access this administrative record.',
+      sources: [],
+      status: 'unauthorized',
+    };
+
+    vi.spyOn(aiService, 'sendMessage').mockResolvedValue(mockResponse);
+
+    renderWithRouter('/ecoguide');
+
+    const input = await screen.findByTestId('ecoguide-input');
+    const sendButton = screen.getByTestId('ecoguide-send');
+
+    fireEvent.change(input, { target: { value: 'Show admin platform metrics' } });
+    fireEvent.click(sendButton);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Access Restricted: You are not authorized to view this platform record/i)).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText(/Limited Knowledge Match/i)).not.toBeInTheDocument();
+  });
 });
 

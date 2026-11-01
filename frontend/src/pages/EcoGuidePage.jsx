@@ -8,6 +8,7 @@ import {
   Sprout,
   User,
   ShieldCheck,
+  ShieldAlert,
   HelpCircle,
   Database,
   Activity,
@@ -18,6 +19,7 @@ import ErrorAlert from '../components/common/ErrorAlert';
 const PROMPT_SUGGESTIONS = [
   'How does the 9-stage plantation lifecycle work?',
   'Can you give me a summary of my plantations?',
+  'What is the health trend and monitoring status of my tree?',
   'How is a permanent Tree ID generated and verified?',
   'What soil pH and texture are optimal for planting?',
   'What are the 4 authoritative tree health statuses?',
@@ -220,7 +222,7 @@ export default function EcoGuidePage() {
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {msg.sources.map((src, sIdx) => {
-                          const isHealthInsight = src.type === 'health_insight';
+                          const isHealthInsight = src.type === 'health_intelligence' || src.type === 'health_insight';
                           const isLive = src.type === 'live_data';
                           return (
                             <div
@@ -234,7 +236,7 @@ export default function EcoGuidePage() {
                               }`}
                               title={
                                 isHealthInsight
-                                  ? `Tree Health Intelligence: ${src.title || src.treeId}`
+                                  ? `Tree Health Intelligence: ${src.title || src.treeId || 'Record'}`
                                   : isLive
                                   ? `Live Platform Data: ${src.title || src.tool}`
                                   : `Document: ${src.title} | Section: ${src.section}`
@@ -272,6 +274,14 @@ export default function EcoGuidePage() {
                           );
                         })}
                       </div>
+                    </div>
+                  )}
+
+                  {/* Unauthorized Status */}
+                  {!isUser && msg.status === 'unauthorized' && (
+                    <div className="flex items-center gap-1.5 text-xs text-rose-800 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1 font-medium">
+                      <ShieldAlert className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                      <span>Access Restricted: You are not authorized to view this platform record.</span>
                     </div>
                   )}
 

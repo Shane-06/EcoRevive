@@ -69,6 +69,41 @@ class KnowledgeRepository {
         }
       }
 
+      // 4. If query contains a public Tree ID or UUID, strip entity identifier and search
+      const withoutEntityIds = cleanQuery
+        .replace(/(ER-PLT-[0-9]{5}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (withoutEntityIds && withoutEntityIds !== cleanQuery && withoutEntityIds.length > 3) {
+        res = await query(sql, [withoutEntityIds, boundedLimit]);
+        if (res.rows.length > 0) {
+          return res.rows;
+        }
+
+        const strippedLeadInNoEntity = withoutEntityIds.replace(conversationalLeadIns, '').trim();
+        if (strippedLeadInNoEntity && strippedLeadInNoEntity !== withoutEntityIds) {
+          res = await query(sql, [strippedLeadInNoEntity, boundedLimit]);
+          if (res.rows.length > 0) {
+            return res.rows;
+          }
+        }
+      }
+
+      // 5. Fallback for compound queries: split into clauses and search each clause with plainto_tsquery
+      const clauses = withoutEntityIds.split(/[,;]|\b(?:and\s+what|and\s+how|and\s+why|what\s+does|what\s+do|and\s+what\s+does)\b/i);
+      if (clauses.length > 1) {
+        for (const clause of clauses) {
+          const strippedClause = clause.replace(conversationalLeadIns, '').trim();
+          if (strippedClause.length >= 4 && strippedClause !== cleanQuery) {
+            res = await query(sql, [strippedClause, boundedLimit]);
+            if (res.rows.length > 0) {
+              return res.rows;
+            }
+          }
+        }
+      }
+
       return [];
     } catch (err) {
       console.error('[KnowledgeRepository Error] Full-text search failed:', err.message || err);

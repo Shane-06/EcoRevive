@@ -275,10 +275,34 @@ class MockAiProvider extends AiProvider {
           const trendMatch = userText.match(/"trend":\s*"([^"]+)"/);
           const statusMatch = userText.match(/"latestStatus":\s*"([^"]+)"/);
           const treeIdMatch = userText.match(/"treeId":\s*"([^"]+)"/);
+          const daysSinceMatch = userText.match(/"daysSinceLastObservation":\s*(\d+)/);
+          const recommendationMatch = userText.match(/"recommendation":\s*"([^"]+)"/);
+
           const trend = trendMatch ? trendMatch[1] : 'stable';
           const status = statusMatch ? statusMatch[1] : 'Healthy';
           const treeId = treeIdMatch ? treeIdMatch[1] : 'ER-PLT';
-          content = `The latest health intelligence record for tree ${treeId} indicates a ${trend} trend. The latest recorded health status is ${status}.`;
+          const daysSince = daysSinceMatch ? daysSinceMatch[1] : null;
+          const recommendation = recommendationMatch ? recommendationMatch[1] : null;
+
+          const isOverdue =
+            userText.includes('"status": "overdue"') ||
+            userText.includes('"status":"overdue"') ||
+            (daysSince && parseInt(daysSince, 10) > 30);
+
+          if (isOverdue) {
+            content = `According to verified platform records, tree ${treeId} was last observed ${daysSince || 'over 30'} days ago and is currently overdue for its regular 30-day inspection schedule. Current health status is recorded as ${status} with a ${trend} trend.`;
+            if (userText.includes('<approved_knowledge_passages>')) {
+              content += ' Per EcoRevive Tree Health Monitoring Protocols, regular 30-day observations are required to detect stress early.';
+            }
+            if (recommendation) {
+              content += ` EcoRevive recommendation: ${recommendation}.`;
+            }
+          } else {
+            content = `The latest health intelligence record for tree ${treeId} indicates a ${trend} trend. The latest recorded health status is ${status}.`;
+            if (recommendation) {
+              content += ` Recommended action: ${recommendation}.`;
+            }
+          }
         }
         return {
           content,
@@ -345,14 +369,56 @@ class MockAiProvider extends AiProvider {
         };
       }
 
-      // 2. Check for Tree ID pattern trigger strictly from actual user query (e.g. ER-PLT-00001 or UUID)
+      // 2. Check for Tree ID pattern trigger (e.g. ER-PLT-00001 or UUID)
       const treeMatch = actualQuery.match(/(ER-PLT-[0-9]{5}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
-      if (treeMatch) {
-        const treeId = treeMatch[1];
+      let targetTreeId = treeMatch ? treeMatch[1] : null;
+
+      // Multi-turn context resolution: if no tree ID in current query, check history for follow-ups
+      if (!targetTreeId) {
+        const isFollowUp =
+          /\b(it|that tree|the tree|this tree|its|which one|the plantation|my tree)\b/i.test(lowerQuery) ||
+          lowerQuery.includes('trend') ||
+          lowerQuery.includes('insight') ||
+          lowerQuery.includes('intelligence') ||
+          lowerQuery.includes('health') ||
+          lowerQuery.includes('observation') ||
+          lowerQuery.includes('condition') ||
+          lowerQuery.includes('monitoring') ||
+          lowerQuery.includes('attention') ||
+          lowerQuery.includes('overdue') ||
+          lowerQuery.includes('recommend');
+
+        if (isFollowUp) {
+          const historyBlock = userText.match(/<untrusted_conversation_history>([\s\S]*?)<\/untrusted_conversation_history>/);
+          const historyText = historyBlock ? historyBlock[1] : '';
+          const matchedIds = Array.from(new Set((historyText.match(/ER-PLT-[0-9]{5}/gi) || []).map(id => id.toUpperCase())));
+
+          if (matchedIds.length === 1) {
+            targetTreeId = matchedIds[0];
+          } else if (matchedIds.length > 1) {
+            // Ambiguous reference: ask for clarification safely
+            return {
+              content: `You have multiple trees in your conversation context (${matchedIds.join(', ')}). Which tree would you like me to check?`,
+              model: this.modelName,
+              fallbackUsed: false,
+              usage: { promptTokens: 30, completionTokens: 20, totalTokens: 50 },
+              finishReason: 'STOP',
+              costIncurred: '$0.00',
+            };
+          }
+        }
+      }
+
+      if (targetTreeId) {
+        const treeId = targetTreeId;
         const isInsightQuery =
           lowerQuery.includes('trend') ||
           lowerQuery.includes('insight') ||
-          lowerQuery.includes('intelligence');
+          lowerQuery.includes('intelligence') ||
+          lowerQuery.includes('overdue') ||
+          lowerQuery.includes('recommend') ||
+          lowerQuery.includes('attention') ||
+          lowerQuery.includes('freshness');
 
         if (isInsightQuery && tools.some(t => t.name === 'getTreeHealthInsight')) {
           return {
@@ -429,9 +495,11 @@ class MockAiProvider extends AiProvider {
         '1. **Your Plantation Records**: Ask for a summary or count of your registered plantations (e.g., "How many plantations have I done?" or "Can you give me a summary of my plantations?").\n' +
         '2. **Verified Tree Status**: Inquire about an approved tree by its public Tree ID (e.g., "What is the status of tree ER-PLT-00001?").\n' +
         '3. **Tree Health Observations**: Ask for recent health monitoring observations for a verified tree (e.g., "What is the health observation for tree ER-PLT-00001?").\n' +
-        '4. **Lifecycle & Verification**: Learn about the 9-stage lifecycle, evidence submission, and administrator verification.\n' +
-        '5. **Environmental Suitability**: Ask about soil pH tiers, textures, and weather requirements.\n' +
-        '6. **Health Classifications**: Learn about the four authoritative health statuses (Healthy, Good, Needs Attention, Dead) and the 30-day inspection schedule.\n' +
+        '4. **Tree Health Intelligence**: Inquire about deterministic health trends, 30-day monitoring freshness, and follow-up recommendations for a verified tree.\n' +
+        '5. **Lifecycle & Verification**: Learn about the 9-stage lifecycle, evidence submission, and administrator verification.\n' +
+        '6. **Environmental Suitability**: Ask about soil pH tiers, textures, and weather requirements.\n' +
+        '7. **Health Classifications**: Learn about the four authoritative health statuses (Healthy, Good, Needs Attention, Dead) and the 30-day inspection schedule.\n' +
+        '8. **Platform Roles & Privacy**: Understand permissions for contributors, caretakers, and coordinators, as well as data privacy safeguards.';
         '7. **Platform Roles & Privacy**: Understand permissions for contributors, caretakers, and coordinators, as well as data privacy safeguards.';
     } else if (lowerQuery.includes('health')) {
       content = 'Tree health records in EcoRevive follow four standard statuses: Healthy, Good, Needs Attention, and Dead. Health trends are evaluated deterministically from recorded caretaker observations.';

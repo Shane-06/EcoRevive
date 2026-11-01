@@ -9,6 +9,19 @@ const { query } = require('../../config/db');
 // Bounds enforced by freeze record
 const TOOL_TIMEOUT_MS = 3000;
 const MAX_OUTPUT_CHARS = 2000;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Sanitizes entity IDs for public source citations, ensuring internal database UUIDs are never exposed.
+ * @param {string} id
+ * @returns {string|null}
+ */
+function sanitizePublicEntityId(id) {
+  if (!id || typeof id !== 'string') return null;
+  const trimmed = id.trim();
+  if (UUID_REGEX.test(trimmed)) return null;
+  return trimmed;
+}
 
 class ToolExecutorService {
   constructor(options = {}) {
@@ -201,7 +214,7 @@ class ToolExecutorService {
           sourceId: 'TOOL-VERIFIED-TREE',
           title: 'Verified Tree Status Record',
           tool: 'getVerifiedTreeStatus',
-          entityId: treeId,
+          entityId: sanitizePublicEntityId(treeId),
         },
       };
     }
@@ -212,7 +225,7 @@ class ToolExecutorService {
       success: true,
       data: {
         found: true,
-        treeId: row.tree_id || treeId,
+        treeId: row.tree_id || (sanitizePublicEntityId(treeId) || null),
         species: row.species,
         status: 'Verified',
         plantedOn: typeof row.planted_on === 'string' ? row.planted_on.split('T')[0] : row.planted_on,
@@ -223,7 +236,7 @@ class ToolExecutorService {
         sourceId: 'TOOL-VERIFIED-TREE',
         title: 'Verified Tree Status Record',
         tool: 'getVerifiedTreeStatus',
-        entityId: row.tree_id || treeId,
+        entityId: row.tree_id || sanitizePublicEntityId(treeId),
       },
     };
   }
@@ -248,7 +261,7 @@ class ToolExecutorService {
           sourceId: 'TOOL-TREE-HEALTH',
           title: 'Tree Health Observations Summary',
           tool: 'getTreeHealthSummary',
-          entityId: treeId,
+          entityId: sanitizePublicEntityId(treeId),
         },
       };
     }
@@ -268,7 +281,7 @@ class ToolExecutorService {
       success: true,
       data: {
         found: true,
-        treeId: tree.tree_id || treeId,
+        treeId: tree.tree_id || (sanitizePublicEntityId(treeId) || null),
         currentHealth: logs.length > 0 ? logs[0].health_status : 'No observations recorded yet',
         observationCount: logs.length,
         recentObservations,
@@ -278,7 +291,7 @@ class ToolExecutorService {
         sourceId: 'TOOL-TREE-HEALTH',
         title: 'Tree Health Observations Summary',
         tool: 'getTreeHealthSummary',
-        entityId: tree.tree_id || treeId,
+        entityId: tree.tree_id || sanitizePublicEntityId(treeId),
       },
     };
   }
@@ -339,7 +352,8 @@ class ToolExecutorService {
           sourceId: 'TOOL-HEALTH-INSIGHT',
           title: 'Tree Health Intelligence Record',
           tool: 'getTreeHealthInsight',
-          entityId: insight.treeId,
+          entityId: sanitizePublicEntityId(insight.treeId),
+          treeId: sanitizePublicEntityId(insight.treeId),
         },
       };
     } catch {
@@ -355,7 +369,8 @@ class ToolExecutorService {
           sourceId: 'TOOL-HEALTH-INSIGHT',
           title: 'Tree Health Intelligence Record',
           tool: 'getTreeHealthInsight',
-          entityId: treeId,
+          entityId: sanitizePublicEntityId(treeId),
+          treeId: sanitizePublicEntityId(treeId),
         },
       };
     }
