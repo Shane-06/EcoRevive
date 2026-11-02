@@ -10,7 +10,11 @@ const config = {
   port: parseInt(process.env.PORT || '5000', 10),
   appUrl: process.env.APP_URL || process.env.PUBLIC_URL || 'http://localhost:5173',
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: process.env.CORS_ORIGIN
+      ? process.env.CORS_ORIGIN.includes(',')
+        ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean)
+        : process.env.CORS_ORIGIN.trim()
+      : 'http://localhost:5173',
     credentials: true,
   },
   api: {

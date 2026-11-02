@@ -104,7 +104,18 @@ const aiRateLimiter = createRateLimiter({
   code: 'RATE_LIMIT_EXCEEDED',
 });
 
+// Pre-configured rate limiter for public registry endpoints: 60 requests per minute per IP
+// Explicit IP-based key generator ensures rate limiting is enforced per IP regardless of authentication
+const publicRateLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: 'Public registry rate limit exceeded. You may send up to 60 requests per minute.',
+  code: 'PUBLIC_RATE_LIMIT_EXCEEDED',
+  keyGenerator: (req) => `ip:${req.ip || req.socket?.remoteAddress || 'unknown'}`,
+});
+
 module.exports = {
   createRateLimiter,
   aiRateLimiter,
+  publicRateLimiter,
 };
