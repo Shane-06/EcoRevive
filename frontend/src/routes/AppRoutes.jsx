@@ -1,9 +1,13 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
 import AuthLayout from '../layouts/AuthLayout';
 import ProtectedRoute from './ProtectedRoute';
 import RoleRoute from './RoleRoute';
 import { ROLES } from '../utils/constants';
+import { getRoleLandingRoute } from '../utils/navigation';
+import { useAuth } from '../hooks/useAuth';
+import LoadingSpinner from '../components/common/LoadingSpinner';
+import ScrollToTop from '../components/common/ScrollToTop';
 
 // Public & Common Pages
 import HomePage from '../pages/HomePage';
@@ -29,9 +33,51 @@ import AdminDashboardPage from '../pages/AdminDashboardPage';
 // AI Assistant Pages (V2-M2)
 import EcoGuidePage from '../pages/EcoGuidePage';
 
+/**
+ * RootRoute:
+ * - If auth state is hydrating from storage, displays LoadingSpinner.
+ * - If user is authenticated, redirects to the role-specific default workspace.
+ * - If user is unauthenticated, renders public HomePage.
+ */
+export function RootRoute() {
+  const { isAuthenticated, user, loading } = useAuth();
+
+  if (loading) {
+    return <LoadingSpinner fullScreen message="Checking authentication session..." />;
+  }
+
+  if (isAuthenticated && user?.role) {
+    return <Navigate to={getRoleLandingRoute(user.role)} replace />;
+  }
+
+  return <HomePage />;
+}
+
+/**
+ * DashboardRoute:
+ * - Contributor: renders DashboardPage (Contributor Workspace).
+ * - Admin: redirects to /admin/dashboard.
+ * - Caretaker: redirects to /monitor.
+ */
+export function DashboardRoute() {
+  const { user } = useAuth();
+
+  if (user?.role === ROLES.ADMIN) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+
+  if (user?.role === ROLES.CARETAKER) {
+    return <Navigate to="/monitor" replace />;
+  }
+
+  return <DashboardPage />;
+}
+
 export default function AppRoutes() {
   return (
-    <Routes>
+    <>
+      <ScrollToTop />
+      <Routes>
       {/* Auth Layout Routes */}
       <Route element={<AuthLayout />}>
         <Route path="/login" element={<LoginPage />} />
@@ -41,12 +87,23 @@ export default function AppRoutes() {
       {/* Main Application Layout */}
       <Route element={<MainLayout />}>
         {/* Public Routes */}
-        <Route path="/" element={<HomePage />} />
+        <Route path="/" element={<RootRoute />} />
         <Route path="/map" element={<MapPage />} />
         <Route path="/tree/:treeId" element={<PublicTreeProfilePage />} />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
-        {/* Authenticated Routes (Contributor & Admin) */}
+        {/* Authenticated Dashboard Route (Role-Aware Dispatcher) */}
+        <Route
+          element={
+            <ProtectedRoute>
+              <RoleRoute allowedRoles={[ROLES.CONTRIBUTOR, ROLES.CARETAKER, ROLES.ADMIN]} />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/dashboard" element={<DashboardRoute />} />
+        </Route>
+
+        {/* Authenticated Contributor & Admin Routes */}
         <Route
           element={
             <ProtectedRoute>
@@ -55,7 +112,6 @@ export default function AppRoutes() {
           }
         >
           <Route path="/trees" element={<PlantationPage />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
         </Route>
 
         {/* Authenticated All-User Routes (Rewards & EcoGuide) */}
@@ -98,5 +154,6 @@ export default function AppRoutes() {
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
+    </>
   );
 }

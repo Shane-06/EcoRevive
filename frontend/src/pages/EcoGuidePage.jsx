@@ -38,17 +38,42 @@ export default function EcoGuidePage() {
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const messagesContainerRef = useRef(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const isInitialMount = useRef(true);
 
-  const scrollToBottom = () => {
-    if (typeof messagesEndRef.current?.scrollIntoView === 'function') {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+  // Ensure window scroll position starts strictly at the top on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+      window.scrollTo(0, 0);
+    }
+  }, []);
+
+  const scrollToBottom = (behavior = 'smooth') => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    if (typeof container.scrollTo === 'function') {
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior,
+      });
+    } else {
+      container.scrollTop = container.scrollHeight;
     }
   };
 
   useEffect(() => {
-    scrollToBottom();
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = 0;
+      }
+      return;
+    }
+
+    scrollToBottom('smooth');
   }, [messages, loading]);
 
   const handleSend = async (textToSend) => {
@@ -119,6 +144,9 @@ export default function EcoGuidePage() {
     ]);
     setError(null);
     setInputValue('');
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = 0;
+    }
   };
 
   const handleRetryLast = () => {
@@ -177,6 +205,7 @@ export default function EcoGuidePage() {
       <div className="bg-white border border-warm-300 rounded-2xl shadow-card flex flex-col h-[600px] overflow-hidden">
         {/* Messages Feed */}
         <div
+          ref={messagesContainerRef}
           data-testid="ecoguide-messages-feed"
           className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 bg-warm-100/50"
         >

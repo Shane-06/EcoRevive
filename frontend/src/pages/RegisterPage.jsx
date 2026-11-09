@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import ErrorAlert from '../components/common/ErrorAlert';
 import { UserPlus, Loader2 } from 'lucide-react';
+import { getRoleLandingRoute } from '../utils/navigation';
+import { ROLES } from '../utils/constants';
 
 export default function RegisterPage() {
   const [name, setName] = useState('');
@@ -30,13 +32,14 @@ export default function RegisterPage() {
 
     setSubmitting(true);
     try {
-      await register({
+      const userData = await register({
         name: name.trim(),
         email: email.trim(),
         password,
       });
 
-      navigate('/dashboard', { replace: true });
+      const targetRoute = getRoleLandingRoute(userData?.role || ROLES.CONTRIBUTOR);
+      navigate(targetRoute, { replace: true });
     } catch (err) {
       setError(err.message || 'Registration failed. Please try again.');
     } finally {

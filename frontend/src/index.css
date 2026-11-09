@@ -360,6 +360,463 @@
 
 .tl-renewal-sprout { animation: tl-renewal-sprout-cycle 20s infinite ease-in-out; }
 
+/* =========================================================================
+   9-STAGE PLANTATION LIFECYCLE INTERACTIVE MICRO-ANIMATIONS
+   ========================================================================= */
+
+/* Stage 01: Discover (Pin drop & Radar ping) */
+.s1-pin-group {
+  transform-origin: 120px 72px;
+  transition: transform 0.4s ease-out;
+}
+.group:hover .s1-pin-group,
+.group:focus-within .s1-pin-group,
+.stage-active .s1-pin-group {
+  animation: s1-pin-drop 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes s1-pin-drop {
+  0% { transform: translateY(-16px); }
+  60% { transform: translateY(2px); }
+  80% { transform: translateY(-2px); }
+  100% { transform: translateY(0); }
+}
+
+.s1-radar-ring-1,
+.s1-radar-ring-2 {
+  transform-origin: 120px 72px;
+  opacity: 0.3;
+  transition: all 0.4s ease-out;
+}
+.group:hover .s1-radar-ring-1,
+.group:focus-within .s1-radar-ring-1,
+.stage-active .s1-radar-ring-1 {
+  animation: s1-radar-ping-1 1.6s infinite ease-out;
+}
+.group:hover .s1-radar-ring-2,
+.group:focus-within .s1-radar-ring-2,
+.stage-active .s1-radar-ring-2 {
+  animation: s1-radar-ping-2 1.6s 0.3s infinite ease-out;
+}
+@keyframes s1-radar-ping-1 {
+  0% { transform: scale(0.6); opacity: 0.9; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+@keyframes s1-radar-ping-2 {
+  0% { transform: scale(0.5); opacity: 0.8; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+.s1-micro-sprout {
+  transform-origin: 120px 70px;
+  opacity: 0.7;
+  transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+}
+.group:hover .s1-micro-sprout,
+.group:focus-within .s1-micro-sprout,
+.stage-active .s1-micro-sprout {
+  animation: s1-sprout-pulse 1.2s 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes s1-sprout-pulse {
+  0% { transform: translate(120px, 70px) scale(0.5); opacity: 0.4; }
+  70% { transform: translate(120px, 70px) scale(1.25); opacity: 1; }
+  100% { transform: translate(120px, 70px) scale(1); opacity: 1; }
+}
+
+/* Stage 02: Assess (Sun rays spin & Soil scanning beam) */
+.s2-sun-rays {
+  transform-origin: 0 0;
+  transition: transform 0.4s ease-out;
+}
+.group:hover .s2-sun-rays,
+.group:focus-within .s2-sun-rays,
+.stage-active .s2-sun-rays {
+  animation: s2-sun-spin 8s linear infinite;
+}
+@keyframes s2-sun-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.s2-scanner-group {
+  transition: transform 0.4s ease-out, opacity 0.4s ease-out;
+  opacity: 0.4;
+}
+.group:hover .s2-scanner-group,
+.group:focus-within .s2-scanner-group,
+.stage-active .s2-scanner-group {
+  animation: s2-scanner-sweep 2s ease-in-out infinite alternate;
+  opacity: 1;
+}
+@keyframes s2-scanner-sweep {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(32px); }
+}
+
+.s2-leaf-icon {
+  transform-origin: 0 0;
+  transition: transform 0.4s ease-out;
+}
+.group:hover .s2-leaf-icon,
+.group:focus-within .s2-leaf-icon,
+.stage-active .s2-leaf-icon {
+  animation: s2-leaf-pop 1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes s2-leaf-pop {
+  0% { transform: rotate(-30deg) scale(0.85); }
+  60% { transform: rotate(15deg) scale(1.2); }
+  80% { transform: rotate(-5deg) scale(1.05); }
+  100% { transform: rotate(0deg) scale(1.1); }
+}
+
+/* Stage 03: Plant (Sapling stem rise & Leaves unfurl) */
+.s3-sprout-stem {
+  transform-origin: 0 0;
+  transition: transform 0.4s ease-out;
+}
+.group:hover .s3-sprout-stem,
+.group:focus-within .s3-sprout-stem,
+.stage-active .s3-sprout-stem {
+  animation: s3-stem-grow 0.9s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+@keyframes s3-stem-grow {
+  0% { transform: scaleY(0.4); }
+  70% { transform: scaleY(1.08); }
+  100% { transform: scaleY(1); }
+}
+
+.s3-leaf-left,
+.s3-leaf-right {
+  transition: transform 0.4s ease-out, opacity 0.4s ease-out;
+}
+.group:hover .s3-leaf-left,
+.group:focus-within .s3-leaf-left,
+.stage-active .s3-leaf-left {
+  animation: s3-leaf-l-unfurl 0.8s 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+.group:hover .s3-leaf-right,
+.group:focus-within .s3-leaf-right,
+.stage-active .s3-leaf-right {
+  animation: s3-leaf-r-unfurl 0.8s 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes s3-leaf-l-unfurl {
+  0% { transform: scale(0.2) rotate(20deg); opacity: 0; }
+  70% { transform: scale(1.15) rotate(-5deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+@keyframes s3-leaf-r-unfurl {
+  0% { transform: scale(0.2) rotate(-20deg); opacity: 0; }
+  70% { transform: scale(1.15) rotate(5deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+.s3-soil-crumbs {
+  transition: transform 0.3s ease-out;
+}
+.group:hover .s3-soil-crumbs,
+.group:focus-within .s3-soil-crumbs,
+.stage-active .s3-soil-crumbs {
+  animation: s3-crumbs-displace 0.6s ease-out forwards;
+}
+@keyframes s3-crumbs-displace {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+  100% { transform: translateY(0); }
+}
+
+/* Stage 04: Prove (Viewfinder focus & Evidence badge pop) */
+.s4-bracket-tl,
+.s4-bracket-tr,
+.s4-bracket-bl,
+.s4-bracket-br {
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.group:hover .s4-bracket-tl,
+.group:focus-within .s4-bracket-tl,
+.stage-active .s4-bracket-tl {
+  transform: translate(6px, 6px);
+}
+.group:hover .s4-bracket-tr,
+.group:focus-within .s4-bracket-tr,
+.stage-active .s4-bracket-tr {
+  transform: translate(-6px, 6px);
+}
+.group:hover .s4-bracket-bl,
+.group:focus-within .s4-bracket-bl,
+.stage-active .s4-bracket-bl {
+  transform: translate(6px, -6px);
+}
+.group:hover .s4-bracket-br,
+.group:focus-within .s4-bracket-br,
+.stage-active .s4-bracket-br {
+  transform: translate(-6px, -6px);
+}
+
+.s4-camera-flash {
+  opacity: 0;
+  pointer-events: none;
+}
+.group:hover .s4-camera-flash,
+.group:focus-within .s4-camera-flash,
+.stage-active .s4-camera-flash {
+  animation: s4-flash-pulse 0.6s ease-out forwards;
+}
+@keyframes s4-flash-pulse {
+  0% { opacity: 0; transform: scale(0.5); }
+  30% { opacity: 0.9; transform: scale(1.1); }
+  100% { opacity: 0; transform: scale(1.4); }
+}
+
+.s4-evidence-badge {
+  transform-origin: 45px 20px;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.group:hover .s4-evidence-badge,
+.group:focus-within .s4-evidence-badge,
+.stage-active .s4-evidence-badge {
+  animation: s4-badge-pop 0.6s 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes s4-badge-pop {
+  0% { transform: scale(0.6); opacity: 0.6; }
+  60% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Stage 05: Verify (Auditor checklist ticks & Stamp slam) */
+.s5-check-1,
+.s5-check-2,
+.s5-check-3 {
+  stroke-dasharray: 12;
+  stroke-dashoffset: 0;
+  transition: all 0.3s ease-out;
+}
+.group:hover .s5-check-1,
+.group:focus-within .s5-check-1,
+.stage-active .s5-check-1 {
+  animation: s5-check-tick 0.35s 0.1s ease-out forwards;
+}
+.group:hover .s5-check-2,
+.group:focus-within .s5-check-2,
+.stage-active .s5-check-2 {
+  animation: s5-check-tick 0.35s 0.25s ease-out forwards;
+}
+.group:hover .s5-check-3,
+.group:focus-within .s5-check-3,
+.stage-active .s5-check-3 {
+  animation: s5-check-tick 0.35s 0.4s ease-out forwards;
+}
+@keyframes s5-check-tick {
+  0% { stroke-dashoffset: 12; opacity: 0; }
+  100% { stroke-dashoffset: 0; opacity: 1; }
+}
+
+.s5-audit-stamp {
+  transform-origin: 32px 12px;
+  transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+  opacity: 0.85;
+}
+.group:hover .s5-audit-stamp,
+.group:focus-within .s5-audit-stamp,
+.stage-active .s5-audit-stamp {
+  animation: s5-stamp-slam 0.6s 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes s5-stamp-slam {
+  0% { transform: scale(1.8) rotate(-25deg); opacity: 0; }
+  60% { transform: scale(0.92) rotate(-10deg); opacity: 1; }
+  80% { transform: scale(1.05) rotate(-12deg); }
+  100% { transform: scale(1) rotate(-12deg); opacity: 1; }
+}
+
+/* Stage 06: Identify (Laser QR sweep & Authoritative ID glow) */
+.s6-laser-scanner {
+  transition: transform 0.4s ease-out;
+}
+.group:hover .s6-laser-scanner,
+.group:focus-within .s6-laser-scanner,
+.stage-active .s6-laser-scanner {
+  animation: s6-laser-sweep 1.8s ease-in-out infinite alternate;
+}
+@keyframes s6-laser-sweep {
+  0% { transform: translateY(0); opacity: 0.3; }
+  50% { opacity: 1; }
+  100% { transform: translateY(54px); opacity: 0.3; }
+}
+
+.s6-qr-matrix {
+  transition: opacity 0.3s ease-out;
+}
+.group:hover .s6-qr-matrix,
+.group:focus-within .s6-qr-matrix,
+.stage-active .s6-qr-matrix {
+  animation: s6-matrix-shimmer 1.8s ease-in-out infinite;
+}
+@keyframes s6-matrix-shimmer {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+
+.s6-id-chip-card {
+  transition: transform 0.3s ease-out, filter 0.3s ease-out;
+}
+.group:hover .s6-id-chip-card,
+.group:focus-within .s6-id-chip-card,
+.stage-active .s6-id-chip-card {
+  transform: translateX(2px);
+  filter: drop-shadow(0 2px 8px rgba(43, 87, 51, 0.25));
+}
+
+/* Stage 07: Monitor (Clinical vitals heartbeat & Swaying foliage) */
+.s7-branch-group {
+  transform-origin: 120px 24px;
+  transition: transform 0.5s ease-out;
+}
+.group:hover .s7-branch-group,
+.group:focus-within .s7-branch-group,
+.stage-active .s7-branch-group {
+  animation: s7-branch-sway 3s ease-in-out infinite alternate;
+}
+@keyframes s7-branch-sway {
+  0% { transform: rotate(-2deg); }
+  100% { transform: rotate(2deg); }
+}
+
+.s7-ekg-waveform {
+  stroke-dasharray: 260;
+  stroke-dashoffset: 0;
+  transition: stroke 0.3s ease-out;
+}
+.group:hover .s7-ekg-waveform,
+.group:focus-within .s7-ekg-waveform,
+.stage-active .s7-ekg-waveform {
+  animation: s7-ekg-draw 2s linear infinite;
+  stroke: #2b5733;
+}
+@keyframes s7-ekg-draw {
+  0% { stroke-dashoffset: 260; }
+  100% { stroke-dashoffset: 0; }
+}
+
+.s7-health-beacon {
+  transform-origin: 98px 46px;
+}
+.group:hover .s7-health-beacon,
+.group:focus-within .s7-health-beacon,
+.stage-active .s7-health-beacon {
+  animation: s7-beacon-pulse 1.2s infinite ease-in-out;
+}
+@keyframes s7-beacon-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.3); opacity: 0.5; }
+}
+
+.s7-status-pulse {
+  animation: s7-dot-pulse 1.6s infinite ease-in-out;
+}
+@keyframes s7-dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+/* Stage 08: Reward (Medallion light sheen & Floating +50 PTS) */
+.s8-sheen-beam {
+  transition: transform 0.4s ease-out;
+}
+.group:hover .s8-sheen-beam,
+.group:focus-within .s8-sheen-beam,
+.stage-active .s8-sheen-beam {
+  animation: s8-sheen-sweep-anim 1.8s ease-in-out infinite;
+}
+@keyframes s8-sheen-sweep-anim {
+  0% { transform: translateX(-40px) rotate(30deg); opacity: 0; }
+  40% { opacity: 0.8; }
+  80%, 100% { transform: translateX(60px) rotate(30deg); opacity: 0; }
+}
+
+.s8-sparkle-1,
+.s8-sparkle-2,
+.s8-sparkle-3 {
+  transform-origin: center;
+  transition: all 0.3s ease-out;
+  opacity: 0.5;
+}
+.group:hover .s8-sparkle-1,
+.group:focus-within .s8-sparkle-1,
+.stage-active .s8-sparkle-1 {
+  animation: s8-sparkle-twinkle 1.4s infinite ease-in-out;
+}
+.group:hover .s8-sparkle-2,
+.group:focus-within .s8-sparkle-2,
+.stage-active .s8-sparkle-2 {
+  animation: s8-sparkle-twinkle 1.4s 0.3s infinite ease-in-out;
+}
+.group:hover .s8-sparkle-3,
+.group:focus-within .s8-sparkle-3,
+.stage-active .s8-sparkle-3 {
+  animation: s8-sparkle-twinkle 1.4s 0.6s infinite ease-in-out;
+}
+@keyframes s8-sparkle-twinkle {
+  0%, 100% { transform: scale(0.7); opacity: 0.3; }
+  50% { transform: scale(1.3); opacity: 1; }
+}
+
+.s8-points-pill {
+  transform-origin: 120px 20px;
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.group:hover .s8-points-pill,
+.group:focus-within .s8-points-pill,
+.stage-active .s8-points-pill {
+  animation: s8-pill-bounce 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes s8-pill-bounce {
+  0% { transform: translateY(4px) scale(0.92); }
+  60% { transform: translateY(-5px) scale(1.08); }
+  100% { transform: translateY(-2px) scale(1); }
+}
+
+/* Stage 09: Track (Growth trajectory curve draw & Canopy bloom) */
+.s9-growth-curve {
+  stroke-dasharray: 200;
+  stroke-dashoffset: 0;
+  transition: stroke 0.3s ease-out;
+}
+.group:hover .s9-growth-curve,
+.group:focus-within .s9-growth-curve,
+.stage-active .s9-growth-curve {
+  animation: s9-curve-draw 1.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+@keyframes s9-curve-draw {
+  0% { stroke-dashoffset: 200; opacity: 0.3; }
+  100% { stroke-dashoffset: 0; opacity: 1; }
+}
+
+.s9-canopy-foliage {
+  transform-origin: 180px 46px;
+  transition: transform 0.4s ease-out;
+}
+.group:hover .s9-canopy-foliage,
+.group:focus-within .s9-canopy-foliage,
+.stage-active .s9-canopy-foliage {
+  animation: s9-foliage-breathe 2.4s infinite ease-in-out alternate;
+}
+@keyframes s9-foliage-breathe {
+  0% { transform: scale(0.96); }
+  100% { transform: scale(1.04); }
+}
+
+.s9-peak-marker {
+  transform-origin: 180px 26px;
+  transition: all 0.3s ease-out;
+}
+.group:hover .s9-peak-marker,
+.group:focus-within .s9-peak-marker,
+.stage-active .s9-peak-marker {
+  animation: s9-marker-pulse 1.2s infinite ease-in-out;
+}
+@keyframes s9-marker-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(1.3); opacity: 1; }
+}
+
 /* Respect user's motion preferences */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -369,6 +826,14 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  .stage-illustration-svg,
+  .stage-illustration-svg *,
+  .stage-active,
+  .stage-active * {
+    animation: none !important;
+    transition: none !important;
   }
 
   .tree-lifecycle-pulse,

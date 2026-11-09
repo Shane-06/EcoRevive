@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import ErrorAlert from '../components/common/ErrorAlert';
 import { LogIn, Loader2 } from 'lucide-react';
+import { resolvePostLoginRedirect } from '../utils/navigation';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -13,8 +14,6 @@ export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-
-  const from = location.state?.from?.pathname || '/dashboard';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -27,8 +26,9 @@ export default function LoginPage() {
 
     setSubmitting(true);
     try {
-      await login({ email: email.trim(), password });
-      navigate(from, { replace: true });
+      const userData = await login({ email: email.trim(), password });
+      const targetRoute = resolvePostLoginRedirect(userData?.role, location.state?.from?.pathname);
+      navigate(targetRoute, { replace: true });
     } catch (err) {
       setError(err.message || 'Login failed. Please check your credentials.');
     } finally {

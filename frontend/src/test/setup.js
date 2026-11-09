@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom';
+import { vi } from 'vitest';
 
 // Ensure localStorage mock is initialized
 const localStorageMock = (() => {
@@ -21,3 +22,8 @@ Object.defineProperty(window, 'localStorage', {
   value: localStorageMock,
   writable: true,
 });
+
+// Provide a default mock for window.scrollTo in jsdom test environments
+if (typeof window !== 'undefined') {
+  window.scrollTo = vi.fn();
+}

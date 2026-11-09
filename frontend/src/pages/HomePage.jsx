@@ -1,6 +1,9 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import TreeLifecycleAnimation from '../components/home/TreeLifecycleAnimation';
+import LifecycleCard from '../components/home/lifecycle/LifecycleCard';
+import { getRoleLandingRoute } from '../utils/navigation';
+import { ROLES } from '../utils/constants';
 import {
   MapPin,
   ArrowRight,
@@ -18,7 +21,7 @@ import {
 } from 'lucide-react';
 
 export default function HomePage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
   const workflowStages = [
     {
@@ -149,10 +152,16 @@ export default function HomePage() {
                 </Link>
               ) : (
                 <Link
-                  to="/dashboard"
+                  to={getRoleLandingRoute(user?.role)}
                   className="inline-flex items-center gap-2 px-5 py-3 bg-warm-200 hover:bg-warm-300 text-charcoal-800 border border-warm-400 rounded-xl text-sm font-semibold transition-colors"
                 >
-                  <span>Go to Dashboard</span>
+                  <span>
+                    {user?.role === ROLES.ADMIN
+                      ? 'Go to Admin Dashboard'
+                      : user?.role === ROLES.CARETAKER
+                      ? 'Go to Monitor Workspace'
+                      : 'Go to Dashboard'}
+                  </span>
                   <ArrowRight className="w-4 h-4 text-charcoal-600" />
                 </Link>
               )}
@@ -201,42 +210,10 @@ export default function HomePage() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {workflowStages.map((stage) => {
-            const Icon = stage.icon;
-            return (
-              <div
-                key={stage.num}
-                className="p-5 rounded-2xl bg-white border border-warm-400 hover:border-forest-400 shadow-subtle hover:shadow-card transition-all flex flex-col justify-between space-y-4 group"
-              >
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-mono font-bold text-forest-700 bg-forest-50 px-2 py-0.5 rounded border border-forest-200">
-                      {stage.num}
-                    </span>
-                    <span className="text-[10px] uppercase tracking-wider text-charcoal-500 font-semibold">
-                      {stage.tag}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-warm-200 text-forest-900 flex items-center justify-center group-hover:bg-forest-900 group-hover:text-white transition-colors">
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <h3 className="font-bold text-charcoal-900 text-base">{stage.title}</h3>
-                  </div>
-
-                  <p className="text-xs text-charcoal-600 leading-relaxed">
-                    {stage.desc}
-                  </p>
-                </div>
-
-                <div className="pt-2 border-t border-warm-300/80 text-[11px] text-charcoal-500 font-mono">
-                  {stage.stageGroup}
-                </div>
-              </div>
-            );
-          })}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {workflowStages.map((stage) => (
+            <LifecycleCard key={stage.num} stage={stage} />
+          ))}
         </div>
       </section>
 
