@@ -8,12 +8,18 @@ let pool = null;
  */
 const getPool = () => {
   if (!pool) {
-    pool = new Pool({
+    const poolConfig = {
       connectionString: config.db.connectionString,
       max: config.db.max,
       idleTimeoutMillis: config.db.idleTimeoutMillis,
       connectionTimeoutMillis: config.db.connectionTimeoutMillis,
-    });
+    };
+
+    if (config.db.ssl) {
+      poolConfig.ssl = config.db.ssl;
+    }
+
+    pool = new Pool(poolConfig);
 
     pool.on('error', (err) => {
       if (!config.isTest) {

@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const config = require('./config');
 const apiRoutes = require('./routes');
@@ -8,10 +9,19 @@ const { sendSuccess } = require('./utils/apiResponse');
 
 const app = express();
 
+// Configure trusted reverse proxy if explicitly enabled (never blindly trusts arbitrary headers)
+if (config.trustProxy !== false) {
+  app.set('trust proxy', config.trustProxy);
+}
+
 // Standard middleware
 app.use(cors(config.cors));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Serve uploaded media statically if directory exists
+const uploadDir = path.join(__dirname, '../uploads');
+app.use('/uploads', express.static(uploadDir));
 
 // Root welcome & discovery endpoint
 app.get('/', (req, res) => {
