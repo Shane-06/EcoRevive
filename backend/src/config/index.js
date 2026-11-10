@@ -133,6 +133,13 @@ const config = {
   healthIntelligence: {
     monitoringIntervalDays: parseInt(process.env.HEALTH_MONITORING_INTERVAL_DAYS || '30', 10),
   },
+  storage: {
+    provider: (process.env.STORAGE_PROVIDER || 'local').trim().toLowerCase(),
+    supabaseUrl: (process.env.SUPABASE_URL || '').trim().replace(/\/+$/, ''),
+    supabaseServiceRoleKey: (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim(),
+    bucket: (process.env.SUPABASE_STORAGE_BUCKET || 'ecorevive-evidence').trim(),
+    signedUrlExpiresIn: parseInt(process.env.STORAGE_SIGNED_URL_EXPIRES_IN || '3600', 10),
+  },
 };
 
 config.resolveDbSslConfig = resolveDbSslConfig;

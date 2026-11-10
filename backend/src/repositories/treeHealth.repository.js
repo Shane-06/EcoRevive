@@ -14,14 +14,14 @@ class TreeHealthRepository {
 
     if (UUID_REGEX.test(treeIdentifier)) {
       sql = `
-        SELECT id, tree_id, species, status, planted_on::text AS planted_on, contributor_id, created_at, updated_at
+        SELECT id, tree_id, species, status, photo_reference, planted_on::text AS planted_on, contributor_id, created_at, updated_at
         FROM trees
         WHERE id = $1;
       `;
       params = [treeIdentifier];
     } else {
       sql = `
-        SELECT id, tree_id, species, status, planted_on::text AS planted_on, contributor_id, created_at, updated_at
+        SELECT id, tree_id, species, status, photo_reference, planted_on::text AS planted_on, contributor_id, created_at, updated_at
         FROM trees
         WHERE tree_id = $1;
       `;
@@ -182,6 +182,31 @@ class TreeHealthRepository {
     `;
     const res = await query(sql, [treeId, limit]);
     return res.rows;
+  }
+  /**
+   * Retrieves a single health observation by UUID, joined with tree info.
+   * @param {string} logId - Health log UUID
+   * @returns {Promise<object|null>} Health log record or null
+   */
+  async findHealthLogById(logId) {
+    const sql = `
+      SELECT
+        hl.id,
+        hl.tree_id,
+        t.tree_id AS public_tree_id,
+        t.contributor_id,
+        hl.submitted_by,
+        hl.health_status,
+        hl.photo_reference,
+        hl.notes,
+        hl.recorded_at,
+        hl.created_at
+      FROM health_logs hl
+      JOIN trees t ON hl.tree_id = t.id
+      WHERE hl.id = $1;
+    `;
+    const res = await query(sql, [logId]);
+    return res.rows[0] || null;
   }
 }
 

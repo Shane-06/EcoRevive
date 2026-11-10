@@ -13,12 +13,19 @@ class TreeHealthService {
    * @param {object} row - Database row
    * @returns {object} Formatted health log item
    */
-  formatHealthLogItem(row) {
+  formatHealthLogItem(row, { isPublic = false } = {}) {
+    let photoRef = row.photo_reference || null;
+    // Privacy: Never expose private cloud storage keys or URLs through public responses
+    if (isPublic && photoRef && (photoRef.startsWith('health/') || photoRef.startsWith('trees/'))) {
+      photoRef = null;
+    }
+
     return {
       id: row.id,
       treeId: row.public_tree_id || row.tree_id,
       healthStatus: row.health_status,
-      photoReference: row.photo_reference || null,
+      photoReference: photoRef,
+      hasPhoto: Boolean(row.photo_reference),
       notes: row.notes || null,
       recordedAt: row.recorded_at,
       submittedBy: row.submitted_by_id
@@ -155,7 +162,7 @@ class TreeHealthService {
 
     return {
       treeId: tree.tree_id || tree.id,
-      healthLogs: rows.map((r) => this.formatHealthLogItem(r)),
+      healthLogs: rows.map((r) => this.formatHealthLogItem(r, { isPublic: true })),
       pagination: {
         total,
         page: parsedPage,

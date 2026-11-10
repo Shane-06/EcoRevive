@@ -32,6 +32,13 @@ router.use('/verifications', authenticate, requireRole('admin'));
 router.get('/verifications', verificationController.getReviewQueue);
 
 /**
+ * @route GET /api/v1/admin/verifications/:treeId/photo
+ * @desc Retrieve authorized signed URL for reviewing plantation photo evidence
+ * @access Protected (Admin only)
+ */
+router.get('/verifications/:treeId/photo', verificationController.getVerificationPhoto);
+
+/**
  * @route PATCH /api/v1/admin/verifications/:treeId/start
  * @desc Start review on a plantation record (Pending -> Under Review)
  * @access Protected (Admin only)

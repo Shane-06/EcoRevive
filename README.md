@@ -611,8 +611,9 @@ EcoRevive/
 │   │   │   │   ├── healthIntelligence.service.js # Orchestration & scoping
 │   │   │   │   ├── healthTrend.service.js# Monotonic trend calculation
 │   │   │   │   └── monitoringStatus.service.js # 30-day freshness evaluation
-│   │   │   └── ...                       # Domain business services
-│   │   ├── tests/                        # 26 automated backend Jest test suites
+│   │   │   ├── storage.service.js            # Modular photo storage (local disk & Supabase)
+│   │   │   └── ...                           # Domain business services
+│   │   ├── tests/                            # 27 automated backend Jest test suites
 │   │   ├── utils/                        # Response helpers, errors, JWT, QR
 │   │   ├── app.js                        # Express app configuration
 │   │   └── server.js                     # HTTP server listener & graceful shutdown
@@ -812,6 +813,11 @@ npm --prefix frontend run build
 | `AI_TIMEOUT_MS` | Integer | `10000` | Timeout per attempt in milliseconds for AI requests |
 | `AI_OVERALL_DEADLINE_MS` | Integer | `25000` | Overall deadline gate across all AI retry and fallback attempts |
 | `HEALTH_MONITORING_INTERVAL_DAYS` | Integer | `30` | Cadence in days before a tree observation becomes Overdue |
+| `STORAGE_PROVIDER` | String | `local` | Photo storage provider (`local` for dev/test disk storage, `supabase` for cloud) |
+| `SUPABASE_URL` | String | `""` | Supabase Project URL (required when `STORAGE_PROVIDER=supabase`) |
+| `SUPABASE_SERVICE_ROLE_KEY` | String | `""` | Supabase Service-Role key for secure backend storage operations |
+| `SUPABASE_STORAGE_BUCKET` | String | `ecorevive-evidence` | Name of the private Supabase Storage bucket for photo evidence |
+| `STORAGE_SIGNED_URL_EXPIRES_IN` | Integer | `3600` | Lifetime in seconds for generated short-lived signed photo URLs |
 
 ### Frontend Configuration (`frontend/.env`)
 
@@ -837,6 +843,7 @@ All API routes (except system liveness checks) are namespaced under `/api/v1`.
 ### 3. Plantations & Geospatial Trees
 - `POST /api/v1/trees` — Submit a plantation record with GPS coordinates and evidence (Private: Contributor).
 - `GET /api/v1/trees/mine` — List personal plantations registered by the user (Private: Contributor).
+- `GET /api/v1/trees/:treeId/photo` — Retrieve time-limited signed URL for plantation photo evidence (Private: Owner Contributor, Admin, Caretaker).
 - `GET /api/v1/trees/map` — Retrieve verified trees inside a map bounding box viewport (Public).
 - `GET /api/v1/trees/nearby` — Retrieve verified trees within a geographic radius (Public).
 - `GET /api/v1/trees/:treeId/location` — Retrieve latitude/longitude of a verified tree (Public).
@@ -848,6 +855,7 @@ All API routes (except system liveness checks) are namespaced under `/api/v1`.
 
 ### 5. Verification Workflow
 - `GET /api/v1/admin/verifications` — List plantation verification queue with status filters (Private: Admin).
+- `GET /api/v1/admin/verifications/:treeId/photo` — Retrieve time-limited signed URL for verification review (Private: Admin).
 - `PATCH /api/v1/admin/verifications/:treeId/start` — Start review (`Pending` → `Under Review`) (Private: Admin).
 - `PATCH /api/v1/admin/verifications/:treeId/approve` — Approve plantation (`Under Review` → `Verified`, issues Tree ID) (Private: Admin).
 - `PATCH /api/v1/admin/verifications/:treeId/reject` — Reject plantation with mandatory reason (Private: Admin).
@@ -859,6 +867,7 @@ All API routes (except system liveness checks) are namespaced under `/api/v1`.
 ### 7. Health Observations & Tree Health Intelligence
 - `POST /api/v1/trees/:treeId/health-logs` — Record a caretaker health observation on a verified tree (Private: Caretaker).
 - `GET /api/v1/trees/:treeId/health-logs` — Retrieve chronological health observation history (Public).
+- `GET /api/v1/trees/:treeId/health-logs/:logId/photo` — Retrieve time-limited signed URL for health observation (Private: Caretaker, Admin, Tree Owner).
 - `GET /api/v1/health-intelligence` — Retrieve paginated health intelligence insights scoped to user (Private: Contributor, Caretaker, Admin).
 - `GET /api/v1/health-intelligence/trees/:treeId` — Retrieve deterministic health trend, freshness, and suggestions for a single verified tree (Private: Scoped).
 

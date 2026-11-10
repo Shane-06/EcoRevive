@@ -108,13 +108,21 @@ class IdentityService {
     ]);
 
     const currentHealth = latestHealth ? latestHealth.health_status : null;
-    const healthHistory = healthHistoryRows.map((h) => ({
-      id: h.id,
-      healthStatus: h.health_status,
-      recordedAt: h.recorded_at,
-      notes: h.notes || null,
-      photoReference: h.photo_reference || null,
-    }));
+    const healthHistory = healthHistoryRows.map((h) => {
+      let photoRef = h.photo_reference || null;
+      // Privacy: Never expose private cloud storage keys or URLs through public responses
+      if (photoRef && (photoRef.startsWith('health/') || photoRef.startsWith('trees/'))) {
+        photoRef = null;
+      }
+      return {
+        id: h.id,
+        healthStatus: h.health_status,
+        recordedAt: h.recorded_at,
+        notes: h.notes || null,
+        photoReference: photoRef,
+        hasPhoto: Boolean(h.photo_reference),
+      };
+    });
 
     return {
       tree: {

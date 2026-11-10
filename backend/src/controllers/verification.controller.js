@@ -68,6 +68,20 @@ class VerificationController {
       return next(err);
     }
   }
+
+  /**
+   * Handles GET /api/v1/admin/verifications/:treeId/photo
+   * Generates a short-lived signed URL for an authorized admin inspecting plantation evidence.
+   */
+  async getVerificationPhoto(req, res, next) {
+    try {
+      const { treeId } = req.params;
+      const result = await verificationService.getVerificationPhoto(treeId);
+      return sendSuccess(res, result, 200);
+    } catch (err) {
+      return next(err);
+    }
+  }
 }
 
 module.exports = new VerificationController();

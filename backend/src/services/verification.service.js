@@ -1,6 +1,8 @@
 const verificationRepository = require('../repositories/verification.repository');
 const identityRepository = require('../repositories/identity.repository');
+const treeHealthRepository = require('../repositories/treeHealth.repository');
 const rewardRepository = require('../repositories/reward.repository');
+const storageService = require('./storage.service');
 const { withTransaction } = require('../config/db');
 const {
   BadRequestError,
@@ -287,6 +289,30 @@ class VerificationService {
       throw new BadRequestError('Tree ID is required', 'MISSING_TREE_ID');
     }
     return verificationRepository.findHistoryByTreeId(treeId.trim());
+  }
+
+  /**
+   * Generates an authorized, short-lived signed URL for an admin reviewing plantation evidence.
+   * @param {string} treeIdentifier - Tree UUID or Tree ID
+   * @returns {Promise<{treeId: string, photoReference: string, photoUrl: string}>}
+   */
+  async getVerificationPhoto(treeIdentifier) {
+    if (!treeIdentifier || typeof treeIdentifier !== 'string' || treeIdentifier.trim() === '') {
+      throw new BadRequestError('Tree ID is required', 'MISSING_TREE_ID');
+    }
+    const tree = await treeHealthRepository.findTreeByIdentifier(treeIdentifier.trim());
+    if (!tree) {
+      throw new NotFoundError(`Tree '${treeIdentifier}' not found`, 'TREE_NOT_FOUND');
+    }
+    if (!tree.photo_reference) {
+      throw new NotFoundError(`No photo evidence on record for tree '${treeIdentifier}'`, 'PHOTO_NOT_FOUND');
+    }
+    const signedUrl = await storageService.getSignedUrl(tree.photo_reference);
+    return {
+      treeId: tree.tree_id || tree.id,
+      photoReference: tree.photo_reference,
+      photoUrl: signedUrl,
+    };
   }
 }
 

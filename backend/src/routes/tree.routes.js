@@ -54,6 +54,13 @@ router.get('/nearby', treeController.getNearbyTrees.bind(treeController));
 router.get('/:treeId/location', treeController.getTreeLocation.bind(treeController));
 
 /**
+ * @route GET /api/v1/trees/:treeId/photo
+ * @desc Retrieve authorized signed URL for plantation photo evidence
+ * @access Private (Owner Contributor, Admin, Caretaker)
+ */
+router.get('/:treeId/photo', authenticate, treeController.getTreePhoto.bind(treeController));
+
+/**
  * @route POST /api/v1/trees/:treeId/health-logs
  * @desc Submit a new health observation log for a Verified tree
  * @access Private (Caretaker)
@@ -72,5 +79,16 @@ router.post(
  * @access Public
  */
 router.get('/:treeId/health-logs', treeHealthController.getHealthHistory.bind(treeHealthController));
+
+/**
+ * @route GET /api/v1/trees/:treeId/health-logs/:logId/photo
+ * @desc Retrieve authorized signed URL for health observation photo evidence
+ * @access Private (Caretaker, Admin, Owner Contributor)
+ */
+router.get(
+  '/:treeId/health-logs/:logId/photo',
+  authenticate,
+  treeHealthController.getHealthLogPhoto.bind(treeHealthController)
+);
 
 module.exports = router;

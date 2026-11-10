@@ -24,6 +24,7 @@ describe('Pre-Deployment Configuration & Security Fixes', () => {
     it('SSL-02: Returns secure SSL config with rejectUnauthorized: true when DB_SSL=true', () => {
       process.env.DB_SSL = 'true';
       delete process.env.DB_SSL_REJECT_UNAUTHORIZED;
+      delete process.env.DB_SSL_CA;
 
       const ssl = config.resolveDbSslConfig();
       expect(ssl).toEqual({ rejectUnauthorized: true });
@@ -33,6 +34,7 @@ describe('Pre-Deployment Configuration & Security Fixes', () => {
       delete process.env.DB_SSL;
       process.env.DATABASE_URL = 'postgresql://user:pass@ep-xyz.neon.tech/neondb?sslmode=require';
       delete process.env.DB_SSL_REJECT_UNAUTHORIZED;
+      delete process.env.DB_SSL_CA;
 
       const ssl = config.resolveDbSslConfig();
       expect(ssl).toEqual({ rejectUnauthorized: true });
@@ -41,6 +43,7 @@ describe('Pre-Deployment Configuration & Security Fixes', () => {
     it('SSL-04: Never disables certificate verification globally; allows explicit opt-out only via DB_SSL_REJECT_UNAUTHORIZED=false', () => {
       process.env.DB_SSL = 'true';
       process.env.DB_SSL_REJECT_UNAUTHORIZED = 'false';
+      delete process.env.DB_SSL_CA;
 
       const ssl = config.resolveDbSslConfig();
       expect(ssl).toEqual({ rejectUnauthorized: false });
