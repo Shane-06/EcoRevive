@@ -1,3 +1,4 @@
+const config = require('../config');
 const openMeteoProvider = require('../integrations/openMeteo.provider');
 const soilGridsProvider = require('../integrations/soilGrids.provider');
 const { BadRequestError } = require('../utils/errors');
@@ -10,6 +11,7 @@ class EnvironmentService {
   constructor() {
     this.weatherCache = new Map(); // key -> { data, expiresAt, lastAccessed }
     this.soilCache = new Map(); // key -> { data, expiresAt, lastAccessed }
+    this.regionalCache = new Map(); // key -> { data, expiresAt, lastAccessed }
     this.pendingWeather = new Map(); // key -> Promise<weather>
     this.pendingSoil = new Map(); // key -> Promise<soil>
 
@@ -33,6 +35,7 @@ class EnvironmentService {
   clearCache() {
     this.weatherCache.clear();
     this.soilCache.clear();
+    this.regionalCache.clear();
     this.pendingWeather.clear();
     this.pendingSoil.clear();
   }
@@ -45,6 +48,7 @@ class EnvironmentService {
     return {
       weatherCacheSize: this.weatherCache.size,
       soilCacheSize: this.soilCache.size,
+      regionalCacheSize: this.regionalCache.size,
       pendingWeatherSize: this.pendingWeather.size,
       pendingSoilSize: this.pendingSoil.size,
     };
@@ -135,6 +139,7 @@ class EnvironmentService {
 
   /**
    * Retrieves soil for normalized coordinates with caching and promise deduplication.
+   * Only valid successful measurements are committed to cache (NoData/null responses are excluded).
    * @param {number} parsedLat
    * @param {number} parsedLng
    * @returns {Promise<object>}
@@ -156,7 +161,18 @@ class EnvironmentService {
     const fetchPromise = (async () => {
       try {
         const result = await soilGridsProvider.fetchSoil({ latitude: parsedLat, longitude: parsedLng });
-        if (result && result.status === 'available') {
+        // Commit to cache ONLY if valid measurements exist (never cache NoData or urban mask as available)
+        const hasValidMeasurements =
+          result &&
+          result.status === 'available' &&
+          result.data &&
+          (result.data.ph !== null ||
+            result.data.clayPercentage !== null ||
+            result.data.sandPercentage !== null ||
+            result.data.siltPercentage !== null ||
+            result.data.organicCarbon !== null);
+
+        if (hasValidMeasurements) {
           this._setCache(this.soilCache, key, result, this.SOIL_TTL_MS);
         }
         return result;
@@ -170,14 +186,108 @@ class EnvironmentService {
   }
 
   /**
+   * Calculates haversine distance between two coordinates in kilometers.
+   * @private
+   */
+  _calculateDistanceKm(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Earth's mean radius in km
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return Math.round(R * c * 10) / 10;
+  }
+
+  /**
+   * Optional bounded regional sampling strategy when exact site soil data is unavailable (urban mask).
+   * Evaluates up to four cardinal probes (North, East, South, West) at configurable distance.
+   * Uses the first valid, geographically closest response.
+   * Never stores regional data under the exact-site cache key.
+   * @param {number} lat - Target latitude
+   * @param {number} lng - Target longitude
+   * @returns {Promise<object|null>}
+   */
+  async getRegionalSoilBaseline(lat, lng) {
+    const regionalKey = `regional:${this.normalizeCoords(lat, lng)}`;
+    const now = Date.now();
+
+    const cachedRegional = this.regionalCache.get(regionalKey);
+    if (cachedRegional && now < cachedRegional.expiresAt) {
+      cachedRegional.lastAccessed = now;
+      return JSON.parse(JSON.stringify(cachedRegional.data));
+    }
+
+    const distanceKm = config.providers.soilGrids.regionalDistanceKm || 10;
+    const deltaLat = distanceKm / 111.0;
+    const cosLat = Math.cos((lat * Math.PI) / 180);
+    const deltaLng = Math.abs(cosLat) > 0.001 ? distanceKm / (111.32 * cosLat) : distanceKm / 111.32;
+
+    const probes = [
+      { direction: 'North', lat: lat + deltaLat, lng },
+      { direction: 'East', lat, lng: lng + deltaLng },
+      { direction: 'South', lat: lat - deltaLat, lng },
+      { direction: 'West', lat, lng: lng - deltaLng },
+    ];
+
+    for (const probe of probes) {
+      const probeLat = Math.max(-90, Math.min(90, probe.lat));
+      const probeLng = Math.max(-180, Math.min(180, probe.lng));
+
+      try {
+        const probeResult = await this.getSoil(probeLat, probeLng);
+
+        if (
+          probeResult &&
+          probeResult.status === 'available' &&
+          probeResult.data &&
+          (probeResult.data.ph !== null || probeResult.data.clayPercentage !== null)
+        ) {
+          const actualDist = this._calculateDistanceKm(lat, lng, probeLat, probeLng);
+          const baselineResult = {
+            status: 'regional_baseline',
+            isRegional: true,
+            source: 'ISRIC SoilGrids (Regional Baseline)',
+            samplingMethod: 'cardinal_radial_probe',
+            sampleLocation: {
+              latitude: Math.round(probeLat * 10000) / 10000,
+              longitude: Math.round(probeLng * 10000) / 10000,
+            },
+            distanceKm: actualDist,
+            direction: probe.direction,
+            warning: `Regional soil baseline derived from nearby non-urban profile (${actualDist} km ${probe.direction} of site). Not an exact-site measurement; urban soil conditions may differ.`,
+            verifiedAt: new Date().toISOString(),
+            stale: false,
+            data: probeResult.data,
+          };
+
+          // Cache in regional cache (NEVER under the exact-site cache key)
+          this._setCache(this.regionalCache, regionalKey, baselineResult, this.SOIL_TTL_MS);
+          return baselineResult;
+        }
+      } catch {
+        // Continue to next probe on probe failure
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Retrieves environmental conditions for a specific location.
    * Concurrently queries Open-Meteo and ISRIC SoilGrids with deduplication and caching.
+   * If exact-site soil data is unavailable (urban mask), optionally queries regional baseline.
    * @param {object} params
    * @param {number|string} params.lat - Latitude coordinate
    * @param {number|string} params.lng - Longitude coordinate
+   * @param {boolean} [params.enableRegionalBaseline=true] - Whether to attempt regional probe on urban NoData
    * @returns {Promise<object>} Normalized environmental assessment data
    */
-  async getLocationEnvironment({ lat, lng }) {
+  async getLocationEnvironment({ lat, lng, enableRegionalBaseline = true }) {
     if (lat === undefined || lat === null || lat === '') {
       throw new BadRequestError('Latitude (lat) is required', 'MISSING_COORDINATES');
     }
@@ -202,10 +312,26 @@ class EnvironmentService {
     }
 
     // Execute provider lookups concurrently with deduplication and caching
-    const [weather, soil] = await Promise.all([
+    const [weather, exactSoil] = await Promise.all([
       this.getWeather(parsedLat, parsedLng),
       this.getSoil(parsedLat, parsedLng),
     ]);
+
+    let soil = exactSoil;
+
+    // Optional regional baseline fallback when exact-site soil is unavailable (urban mask)
+    if (
+      soil &&
+      soil.status === 'unavailable' &&
+      soil.reason === 'urban_mask' &&
+      config.providers.soilGrids.enableRegionalBaseline !== false &&
+      enableRegionalBaseline !== false
+    ) {
+      const regional = await this.getRegionalSoilBaseline(parsedLat, parsedLng);
+      if (regional) {
+        soil = regional;
+      }
+    }
 
     return {
       location: {

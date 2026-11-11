@@ -111,9 +111,24 @@ const evaluateTexture = (ruleSoilType, soilTexture) => {
  */
 const evaluateSoil = (rule, soilSection) => {
   if (!soilSection || soilSection.status === 'unavailable' || !soilSection.data) {
+    const isUrban = soilSection?.reason === 'urban_mask';
+    const reason = isUrban
+      ? 'Soil data unavailable from external provider (ISRIC SoilGrids urban mask). Sunlight, moisture, and spacing were assessed, but local topsoil verification (pH and texture) is required before planting.'
+      : 'Soil data unavailable from external provider (ISRIC SoilGrids). Cannot evaluate soil compatibility. On-site verification or soil test (pH and texture) is recommended.';
     return {
       status: SUITABILITY_STATUS.INSUFFICIENT_DATA,
-      reason: 'Soil data unavailable from external provider (ISRIC SoilGrids). Cannot evaluate soil compatibility.',
+      reason,
+      recommendation: 'Perform on-site soil test or verify local urban topsoil conditions.',
+    };
+  }
+
+  if (soilSection.status === 'regional_baseline' || soilSection.isRegional) {
+    return {
+      status: SUITABILITY_STATUS.INSUFFICIENT_DATA,
+      reason: `Regional soil baseline (${soilSection.distanceKm} km away) indicates indicative conditions, but exact-site urban soil conditions may differ. On-site verification recommended.`,
+      recommendation: 'Perform on-site soil test or verify local urban topsoil conditions.',
+      isRegionalBaseline: true,
+      regionalData: soilSection.data,
     };
   }
 
@@ -124,7 +139,8 @@ const evaluateSoil = (rule, soilSection) => {
   if (phStatus === SUITABILITY_STATUS.INSUFFICIENT_DATA || textureStatus === SUITABILITY_STATUS.INSUFFICIENT_DATA) {
     return {
       status: SUITABILITY_STATUS.INSUFFICIENT_DATA,
-      reason: 'Incomplete soil properties from external provider (ISRIC SoilGrids). Cannot evaluate soil compatibility.',
+      reason: 'Incomplete soil properties from external provider (ISRIC SoilGrids). Cannot evaluate soil compatibility. On-site verification recommended.',
+      recommendation: 'Perform on-site soil test or verify local urban topsoil conditions.',
     };
   }
 
@@ -247,9 +263,10 @@ const evaluateSpacing = (rule) => {
 /**
  * Evaluates overall suitability following the frozen precedence rule:
  * unsuitable > insufficient_data > moderate > suitable
+ * Supports partial assessment transparency when soil is unmeasured/masked.
  * @param {object} checks - Individual component check results
  * @param {string} species - Species name
- * @returns {{status: string, explanation: string}}
+ * @returns {{status: string, explanation: string, isPartial?: boolean, recommendation?: string}}
  */
 const evaluateOverall = (checks, species) => {
   const statuses = [
@@ -262,13 +279,44 @@ const evaluateOverall = (checks, species) => {
   if (statuses.includes(SUITABILITY_STATUS.UNSUITABLE)) {
     return {
       status: SUITABILITY_STATUS.UNSUITABLE,
+      isPartial: false,
       explanation: `One or more environmental parameters are incompatible with the biological requirements of ${species}. Review individual checks for details.`,
+    };
+  }
+
+  // Check if this is a partial assessment where soil is insufficient_data but non-soil checks were evaluated
+  if (checks.soil.status === SUITABILITY_STATUS.INSUFFICIENT_DATA) {
+    const nonSoilStatuses = [checks.sunlight.status, checks.water.status, checks.spacing.status];
+    const nonSoilAvailable = !nonSoilStatuses.includes(SUITABILITY_STATUS.INSUFFICIENT_DATA);
+
+    if (nonSoilAvailable) {
+      const hasModerate = nonSoilStatuses.includes(SUITABILITY_STATUS.MODERATE);
+      const tone = hasModerate
+        ? 'Sunlight, moisture, and spacing requirements were evaluated with moderate conditions'
+        : `Sunlight, moisture, and spacing requirements for ${species} are compatible`;
+
+      return {
+        status: SUITABILITY_STATUS.INSUFFICIENT_DATA,
+        isPartial: true,
+        assessmentType: 'partial_assessment',
+        explanation: `Partial assessment: ${tone}, but soil constraints are unverified at this location. Actionable recommendation: Verify local soil conditions (pH and texture) before planting.`,
+        recommendation: 'Perform on-site soil test or verify local urban topsoil conditions.',
+      };
+    }
+
+    return {
+      status: SUITABILITY_STATUS.INSUFFICIENT_DATA,
+      isPartial: true,
+      assessmentType: 'insufficient_data',
+      explanation: `One or more environmental data sources were unavailable. Overall suitability cannot be reliably determined without complete environmental data.`,
     };
   }
 
   if (statuses.includes(SUITABILITY_STATUS.INSUFFICIENT_DATA)) {
     return {
       status: SUITABILITY_STATUS.INSUFFICIENT_DATA,
+      isPartial: true,
+      assessmentType: 'insufficient_data',
       explanation: `One or more environmental data sources were unavailable. Overall suitability cannot be reliably determined without complete environmental data.`,
     };
   }
@@ -276,12 +324,14 @@ const evaluateOverall = (checks, species) => {
   if (statuses.includes(SUITABILITY_STATUS.MODERATE)) {
     return {
       status: SUITABILITY_STATUS.MODERATE,
+      isPartial: false,
       explanation: `Environmental conditions are moderately suitable for ${species}. Certain parameters may require attention or site management.`,
     };
   }
 
   return {
     status: SUITABILITY_STATUS.SUITABLE,
+    isPartial: false,
     explanation: `All evaluated environmental parameters meet the baseline deterministic suitability rules for ${species}. Note: This is an indicative V1 decision-support tool, not professional forestry certification or legal plantation authorization.`,
   };
 };

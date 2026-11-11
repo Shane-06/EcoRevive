@@ -1,4 +1,4 @@
-import { Cloud, Droplets, Wind, Thermometer, Layers, AlertCircle, CheckCircle2, Info, RefreshCw } from 'lucide-react';
+import { Cloud, Droplets, Wind, Thermometer, Layers, AlertCircle, CheckCircle2, Info, RefreshCw, Compass, Building2 } from 'lucide-react';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorAlert from '../common/ErrorAlert';
 
@@ -164,69 +164,130 @@ export default function EnvironmentPanel({
 
       {/* Soil Properties Section */}
       <div className="p-5 rounded-2xl bg-white border border-warm-400 space-y-3.5 shadow-card">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Layers className="w-4 h-4 text-forest-700" />
-            <h3 className="font-semibold text-charcoal-900 text-sm">Soil Properties (0–5cm)</h3>
-          </div>
-          {soil?.status === 'available' ? (
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-forest-50 border border-forest-200 text-forest-800 text-[10px] font-bold uppercase tracking-wider">
-              <CheckCircle2 className="w-3 h-3 text-forest-600" />
-              Available ({soil.source || 'ISRIC SoilGrids'})
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-warm-200 border border-warm-400 text-charcoal-700 text-[10px] font-semibold uppercase tracking-wider">
-              <AlertCircle className="w-3 h-3 text-charcoal-500" />
-              Unavailable
-            </span>
-          )}
-        </div>
+        {(() => {
+          const isExactAvailable =
+            soil?.status === 'available' &&
+            !soil?.isRegional &&
+            soil?.data &&
+            (soil.data.ph !== null || soil.data.clayPercentage !== null || soil.data.sandPercentage !== null);
+          const isRegional = Boolean(
+            (soil?.status === 'regional_baseline' || soil?.isRegional) && soil?.data
+          );
+          const isUrbanMask = Boolean(
+            !isExactAvailable && !isRegional && (soil?.reason === 'urban_mask' || soil?.reason === 'no_data')
+          );
 
-        {soil?.status === 'available' && soil.data ? (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-              <div className="p-3 rounded-xl bg-warm-50 border border-warm-300 space-y-1">
-                <div className="text-[11px] text-charcoal-500">Topsoil pH</div>
-                <div className="text-sm font-bold font-mono text-forest-800">{soil.data.ph?.toFixed(1) ?? 'N/A'}</div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-warm-50 border border-warm-300 space-y-1">
-                <div className="text-[11px] text-charcoal-500">Texture Class</div>
-                <div className="text-sm font-bold text-charcoal-900 truncate" title={soil.data.texture}>
-                  {soil.data.texture || 'N/A'}
+          return (
+            <>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-forest-700" />
+                  <h3 className="font-semibold text-charcoal-900 text-sm">Soil Properties (0–5cm)</h3>
                 </div>
+                {isExactAvailable ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-forest-50 border border-forest-200 text-forest-800 text-[10px] font-bold uppercase tracking-wider">
+                    <CheckCircle2 className="w-3 h-3 text-forest-600" />
+                    Available ({soil.source || 'ISRIC SoilGrids'})
+                  </span>
+                ) : isRegional ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-300 text-amber-800 text-[10px] font-bold uppercase tracking-wider">
+                    <Compass className="w-3 h-3 text-amber-600" />
+                    Regional Baseline ({soil.distanceKm ? `${soil.distanceKm} km` : 'Nearby'})
+                  </span>
+                ) : isUrbanMask ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-800 text-[10px] font-bold uppercase tracking-wider">
+                    <Building2 className="w-3 h-3 text-blue-600" />
+                    Urban Soil Check Required
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-warm-200 border border-warm-400 text-charcoal-700 text-[10px] font-semibold uppercase tracking-wider">
+                    <AlertCircle className="w-3 h-3 text-charcoal-500" />
+                    Unavailable
+                  </span>
+                )}
               </div>
 
-              <div className="p-3 rounded-xl bg-warm-50 border border-warm-300 space-y-1">
-                <div className="text-[11px] text-charcoal-500">Organic Carbon</div>
-                <div className="text-sm font-bold font-mono text-charcoal-900">
-                  {soil.data.organicCarbon !== null && soil.data.organicCarbon !== undefined
-                    ? `${soil.data.organicCarbon} ${soil.data.organicCarbonUnit || 'g/kg'}`
-                    : 'N/A'}
+              {isExactAvailable || isRegional ? (
+                <div className="space-y-3">
+                  {isRegional && (
+                    <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
+                      <Compass className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-semibold">Regional Baseline Estimate: </span>
+                        <span>
+                          {soil.warning ||
+                            `Derived from nearby non-urban profile (${soil.distanceKm} km from site). Exact-site urban soil conditions may differ.`}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    <div className="p-3 rounded-xl bg-warm-50 border border-warm-300 space-y-1">
+                      <div className="text-[11px] text-charcoal-500">
+                        {isRegional ? 'Regional pH' : 'Topsoil pH'}
+                      </div>
+                      <div className="text-sm font-bold font-mono text-forest-800">
+                        {soil.data.ph !== null && soil.data.ph !== undefined
+                          ? soil.data.ph.toFixed(1)
+                          : 'N/A'}
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-warm-50 border border-warm-300 space-y-1">
+                      <div className="text-[11px] text-charcoal-500">Texture Class</div>
+                      <div
+                        className="text-sm font-bold text-charcoal-900 truncate"
+                        title={soil.data.texture || 'Unclassified'}
+                      >
+                        {soil.data.texture || 'Unclassified'}
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-warm-50 border border-warm-300 space-y-1">
+                      <div className="text-[11px] text-charcoal-500">Organic Carbon</div>
+                      <div className="text-sm font-bold font-mono text-charcoal-900">
+                        {soil.data.organicCarbon !== null && soil.data.organicCarbon !== undefined
+                          ? `${soil.data.organicCarbon} ${soil.data.organicCarbonUnit || 'g/kg'}`
+                          : 'N/A'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-warm-50 border border-warm-300 text-xs text-charcoal-600 space-y-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span>Texture Composition:</span>
+                      <span className="text-charcoal-800 font-mono">
+                        Clay: {soil.data.clayPercentage !== null && soil.data.clayPercentage !== undefined ? `${soil.data.clayPercentage}%` : '--'} | Sand: {soil.data.sandPercentage !== null && soil.data.sandPercentage !== undefined ? `${soil.data.sandPercentage}%` : '--'} | Silt: {soil.data.siltPercentage !== null && soil.data.siltPercentage !== undefined ? `${soil.data.siltPercentage}%` : '--'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-
-            <div className="p-3 rounded-xl bg-warm-50 border border-warm-300 text-xs text-charcoal-600 space-y-1">
-              <div className="flex justify-between text-[11px]">
-                <span>Texture Composition:</span>
-                <span className="text-charcoal-800 font-mono">
-                  Clay: {soil.data.clayPercentage ?? '--'}% | Sand: {soil.data.sandPercentage ?? '--'}% | Silt: {soil.data.siltPercentage ?? '--'}%
-                </span>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="p-3.5 rounded-xl bg-warm-100 border border-warm-300 text-xs text-charcoal-700 flex items-start gap-2.5">
-            <Info className="w-4 h-4 text-charcoal-500 shrink-0 mt-0.5" />
-            <div>
-              <div className="font-semibold text-charcoal-900">Soil Provider Unavailable</div>
-              <div className="text-charcoal-600 text-[11px] mt-0.5 leading-normal">
-                {soil?.error || 'Soil properties temporarily unavailable from ISRIC SoilGrids.'}
-              </div>
-            </div>
-          </div>
-        )}
+              ) : isUrbanMask ? (
+                <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-900 flex items-start gap-2.5">
+                  <Building2 className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-semibold text-blue-950">Urban Soil Verification Required</div>
+                    <div className="text-blue-800 text-[11px] mt-0.5 leading-normal">
+                      {soil?.error ||
+                        'Location is within an urban built-up area masked by ISRIC SoilGrids. Satellite/covariate soil models do not measure built-up city infrastructure. On-site verification or caretaker testing is recommended.'}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3.5 rounded-xl bg-warm-100 border border-warm-300 text-xs text-charcoal-700 flex items-start gap-2.5">
+                  <Info className="w-4 h-4 text-charcoal-500 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-semibold text-charcoal-900">Soil Provider Unavailable</div>
+                    <div className="text-charcoal-600 text-[11px] mt-0.5 leading-normal">
+                      {soil?.error || 'Soil properties temporarily unavailable from ISRIC SoilGrids.'}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()}
       </div>
 
       {/* Additional Providers Scope Footnote */}

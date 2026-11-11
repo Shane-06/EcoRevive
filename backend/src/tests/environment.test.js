@@ -1,5 +1,6 @@
 const request = require('supertest');
 const app = require('../app');
+const config = require('../config');
 const openMeteoProvider = require('../integrations/openMeteo.provider');
 const soilGridsProvider = require('../integrations/soilGrids.provider');
 
@@ -391,8 +392,6 @@ describe('Milestone 7 — Environmental Information Integration Tests', () => {
   });
 
   describe('Milestones 1–3: Environmental Reliability, Caching & Resiliency', () => {
-    const config = require('../config');
-
     it('Cache Hit: should serve cached weather without re-querying Open-Meteo provider', async () => {
       const spy = jest.spyOn(openMeteoProvider, 'fetchWeather').mockResolvedValue({
         status: 'available',
@@ -578,6 +577,219 @@ describe('Milestone 7 — Environmental Information Integration Tests', () => {
       expect(staleSoil.status).toBe('available');
       expect(staleSoil.stale).toBe(true);
       expect(staleSoil.data.ph).toBe(7.2);
+    });
+
+    // =========================================================================
+    // Milestone 15: Urban Soil Intelligence & Reliable Environmental Cache Tests
+    // =========================================================================
+    it('SOIL-URBAN-01: All-null urban response returns status unavailable and reason urban_mask', async () => {
+      const mockAllNullUrbanResponse = {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [76.82, 30.65] },
+        properties: {
+          layers: [
+            { name: 'phh2o', depths: [{ range: { top_depth: 0, bottom_depth: 5 }, values: { mean: null } }] },
+            { name: 'clay', depths: [{ range: { top_depth: 0, bottom_depth: 5 }, values: { mean: null } }] },
+            { name: 'sand', depths: [{ range: { top_depth: 0, bottom_depth: 5 }, values: { mean: null } }] },
+            { name: 'silt', depths: [{ range: { top_depth: 0, bottom_depth: 5 }, values: { mean: null } }] },
+            { name: 'soc', depths: [{ range: { top_depth: 0, bottom_depth: 5 }, values: { mean: null } }] },
+          ],
+        },
+      };
+
+      jest.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockAllNullUrbanResponse,
+      });
+
+      const result = await soilGridsProvider.fetchSoil({ latitude: 30.6533, longitude: 76.8228 });
+      expect(result.status).toBe('unavailable');
+      expect(result.reason).toBe('urban_mask');
+      expect(result.data).toBeNull();
+      expect(result.error).toContain('urban built-up area');
+
+      // Verify it was NOT saved to stale cache
+      const stale = soilGridsProvider.staleSoilMap.get(soilGridsProvider.normalizeCoords(30.6533, 76.8228));
+      expect(stale).toBeUndefined();
+    });
+
+    it('SOIL-URBAN-02: Partially populated response preserves valid values and returns texture null when sand/silt/clay are missing', async () => {
+      const mockPartialResponse = {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [76.82, 30.65] },
+        properties: {
+          layers: [
+            { name: 'phh2o', depths: [{ range: { top_depth: 0, bottom_depth: 5 }, values: { mean: 65 } }] },
+            { name: 'clay', depths: [{ range: { top_depth: 0, bottom_depth: 5 }, values: { mean: null } }] },
+            { name: 'sand', depths: [{ range: { top_depth: 0, bottom_depth: 5 }, values: { mean: null } }] },
+            { name: 'silt', depths: [{ range: { top_depth: 0, bottom_depth: 5 }, values: { mean: null } }] },
+            { name: 'soc', depths: [{ range: { top_depth: 0, bottom_depth: 5 }, values: { mean: null } }] },
+          ],
+        },
+      };
+
+      jest.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockPartialResponse,
+      });
+
+      const result = await soilGridsProvider.fetchSoil({ latitude: 30.65, longitude: 76.82 });
+      expect(result.status).toBe('available');
+      expect(result.data.ph).toBe(6.5);
+      expect(result.data.clayPercentage).toBeNull();
+      expect(result.data.texture).toBeNull(); // Must NEVER default to Loam
+      expect(result.data.organicCarbon).toBeNull();
+    });
+
+    it('SOIL-URBAN-03: deriveSoilTexture returns null when inputs are missing and never assigns false Loam', () => {
+      expect(soilGridsProvider.deriveSoilTexture(null, null, null)).toBeNull();
+      expect(soilGridsProvider.deriveSoilTexture(25, null, 35)).toBeNull();
+      expect(soilGridsProvider.deriveSoilTexture(undefined, 50, 20)).toBeNull();
+      expect(soilGridsProvider.deriveSoilTexture('invalid', 50, 20)).toBeNull();
+
+      // Valid measurements return standard classes
+      expect(soilGridsProvider.deriveSoilTexture(45, 20, 35)).toBe('Clay');
+      expect(soilGridsProvider.deriveSoilTexture(22, 45, 33)).toBe('Loam');
+      expect(soilGridsProvider.deriveSoilTexture(10, 88, 2)).toBe('Sand');
+    });
+
+    it('SOIL-URBAN-04: NoData urban mask response is never stored in successful soilCache', async () => {
+      const mockAllNullUrbanResponse = {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [76.82, 30.65] },
+        properties: {
+          layers: [
+            { name: 'phh2o', depths: [{ range: { top_depth: 0, bottom_depth: 5 }, values: { mean: null } }] },
+            { name: 'clay', depths: [{ range: { top_depth: 0, bottom_depth: 5 }, values: { mean: null } }] },
+            { name: 'sand', depths: [{ range: { top_depth: 0, bottom_depth: 5 }, values: { mean: null } }] },
+            { name: 'silt', depths: [{ range: { top_depth: 0, bottom_depth: 5 }, values: { mean: null } }] },
+            { name: 'soc', depths: [{ range: { top_depth: 0, bottom_depth: 5 }, values: { mean: null } }] },
+          ],
+        },
+      };
+
+      jest.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockAllNullUrbanResponse,
+      });
+
+      const soil = await environmentService.getSoil(30.65, 76.82);
+      expect(soil.status).toBe('unavailable');
+      expect(soil.reason).toBe('urban_mask');
+
+      // Verify soilCache did NOT cache this result
+      const stats = environmentService.getCacheStats();
+      expect(stats.soilCacheSize).toBe(0);
+      expect(environmentService.soilCache.has('30.65:76.82')).toBe(false);
+    });
+
+    it('SOIL-REGIONAL-01: Cardinal regional baseline probe is labelled correctly and not stored under exact-site cache key', async () => {
+      // 1. Exact site query returns urban NoData
+      jest.spyOn(soilGridsProvider, 'fetchSoil')
+        .mockResolvedValueOnce({
+          status: 'unavailable',
+          source: 'ISRIC SoilGrids',
+          reason: 'urban_mask',
+          verifiedAt: null,
+          data: null,
+          error: 'Location is within an urban built-up area',
+        })
+        // 2. North cardinal probe returns valid rural soil measurement
+        .mockResolvedValueOnce({
+          status: 'available',
+          source: 'ISRIC SoilGrids',
+          verifiedAt: new Date().toISOString(),
+          stale: false,
+          data: {
+            ph: 6.3,
+            clayPercentage: 23.2,
+            sandPercentage: 44.2,
+            siltPercentage: 32.6,
+            texture: 'Loam',
+            organicCarbon: 36.5,
+            organicCarbonUnit: 'g/kg',
+          },
+        });
+
+      jest.spyOn(openMeteoProvider, 'fetchWeather').mockResolvedValueOnce({
+        status: 'available',
+        source: 'Open-Meteo',
+        data: { temperature: 28.0, condition: 'Clear sky' },
+      });
+
+      const envResult = await environmentService.getLocationEnvironment({
+        lat: 30.65,
+        lng: 76.82,
+        enableRegionalBaseline: true,
+      });
+
+      expect(envResult.soil.status).toBe('regional_baseline');
+      expect(envResult.soil.isRegional).toBe(true);
+      expect(envResult.soil.source).toContain('Regional Baseline');
+      expect(envResult.soil.distanceKm).toBeGreaterThan(0);
+      expect(envResult.soil.warning).toContain('Regional soil baseline derived from nearby non-urban profile');
+      expect(envResult.soil.data.ph).toBe(6.3);
+
+      // Verify exact site cache key does NOT have this regional result
+      expect(environmentService.soilCache.has('30.65:76.82')).toBe(false);
+      // Verify regional cache has the entry
+      expect(environmentService.regionalCache.has('regional:30.65:76.82')).toBe(true);
+    });
+
+    it('SOIL-PARTIAL-01: assessSuitability correctly returns partial assessment when soil is unavailable', async () => {
+      const suitabilityService = require('../services/suitability.service');
+      const suitabilityRepository = require('../repositories/suitability.repository');
+
+      jest.spyOn(suitabilityRepository, 'findRuleBySpecies').mockResolvedValueOnce({
+        species: 'Neem',
+        soil_type: 'Well-drained loam',
+        min_spacing_m: 6.0,
+        sunlight: 'Full Sun',
+        water_need: 'Low',
+        climate_region: 'Tropical & Subtropical',
+      });
+
+      jest.spyOn(environmentService, 'getLocationEnvironment').mockResolvedValueOnce({
+        location: { latitude: 30.65, longitude: 76.82 },
+        weather: {
+          status: 'available',
+          source: 'Open-Meteo',
+          data: {
+            temperature: 28.5,
+            humidity: 60,
+            precipitation: 1.0,
+            condition: 'Clear sky',
+            weatherCode: 0,
+          },
+        },
+        soil: {
+          status: 'unavailable',
+          source: 'ISRIC SoilGrids',
+          reason: 'urban_mask',
+          data: null,
+          error: 'Location is within an urban built-up area masked by ISRIC SoilGrids',
+        },
+        terrain: { status: 'unavailable', data: null },
+        land: { status: 'unavailable', data: null },
+        water: { status: 'unavailable', data: null },
+      });
+
+      const res = await suitabilityService.assessSuitability({
+        lat: 30.65,
+        lng: 76.82,
+        species: 'Neem',
+      });
+
+      expect(res.checks.soil.status).toBe('insufficient_data');
+      expect(res.checks.soil.reason).toContain('urban mask');
+      expect(res.checks.sunlight.status).toBe('suitable');
+      expect(res.checks.water.status).toBe('suitable');
+      expect(res.checks.spacing.status).toBe('suitable');
+
+      expect(res.overall.status).toBe('insufficient_data');
+      expect(res.overall.isPartial).toBe(true);
+      expect(res.overall.explanation).toContain('Partial assessment');
+      expect(res.overall.explanation).toContain('Actionable recommendation');
     });
   });
 });

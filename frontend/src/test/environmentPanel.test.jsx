@@ -120,4 +120,80 @@ describe('Milestone 14 — EnvironmentPanel Component Tests', () => {
     expect(screen.getByText('7.2')).toBeInTheDocument();
     expect(screen.getByText(/Available \(ISRIC SoilGrids\)/i)).toBeInTheDocument();
   });
+
+  it('Urban Soil Intelligence: should render Regional Baseline badge, distance, and advisory warning', () => {
+    const regionalEnv = {
+      ...mockFullEnvironment,
+      soil: {
+        status: 'regional_baseline',
+        isRegional: true,
+        source: 'ISRIC SoilGrids (Regional Baseline)',
+        distanceKm: 6.8,
+        warning: 'Regional soil baseline derived from nearby non-urban profile (6.8 km East of site).',
+        data: {
+          ph: 6.5,
+          texture: 'Loam',
+          clayPercentage: 20.0,
+          sandPercentage: 45.0,
+          siltPercentage: 35.0,
+          organicCarbon: 18.0,
+          organicCarbonUnit: 'g/kg',
+        },
+      },
+    };
+
+    render(<EnvironmentPanel environment={regionalEnv} />);
+
+    expect(screen.getByText(/Regional Baseline \(6.8 km\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Regional Baseline Estimate/i)).toBeInTheDocument();
+    expect(screen.getByText(/6.8 km East of site/i)).toBeInTheDocument();
+    expect(screen.getByText('6.5')).toBeInTheDocument();
+    expect(screen.queryByText(/^Available \(ISRIC SoilGrids\)$/i)).not.toBeInTheDocument();
+  });
+
+  it('Urban Soil Intelligence: should render Urban Soil Check Required when SoilGrids returns urban_mask', () => {
+    const urbanEnv = {
+      ...mockFullEnvironment,
+      soil: {
+        status: 'unavailable',
+        source: 'ISRIC SoilGrids',
+        reason: 'urban_mask',
+        data: null,
+        error: 'Location is within an urban built-up area masked by ISRIC SoilGrids.',
+      },
+    };
+
+    render(<EnvironmentPanel environment={urbanEnv} />);
+
+    expect(screen.getByText('Urban Soil Check Required')).toBeInTheDocument();
+    expect(screen.getByText('Urban Soil Verification Required')).toBeInTheDocument();
+    expect(screen.getByText(/urban built-up area masked by ISRIC SoilGrids/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^Available \(ISRIC SoilGrids\)$/i)).not.toBeInTheDocument();
+  });
+
+  it('Urban Soil Intelligence: should render N/A and Unclassified without fabricating Loam for missing properties', () => {
+    const partialSoilEnv = {
+      ...mockFullEnvironment,
+      soil: {
+        status: 'available',
+        source: 'ISRIC SoilGrids',
+        data: {
+          ph: 7.0,
+          texture: null,
+          clayPercentage: null,
+          sandPercentage: null,
+          siltPercentage: null,
+          organicCarbon: null,
+          organicCarbonUnit: 'g/kg',
+        },
+      },
+    };
+
+    render(<EnvironmentPanel environment={partialSoilEnv} />);
+
+    expect(screen.getByText('7.0')).toBeInTheDocument();
+    expect(screen.getByText('Unclassified')).toBeInTheDocument();
+    expect(screen.getByText(/Clay: -- \| Sand: -- \| Silt: --/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^Loam$/)).not.toBeInTheDocument();
+  });
 });

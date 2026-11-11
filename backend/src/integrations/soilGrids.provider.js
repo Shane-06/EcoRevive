@@ -4,14 +4,19 @@ const MAX_STALE_ENTRIES = 500;
 
 /**
  * Derives general USDA soil texture class based on clay, sand, and silt percentages.
+ * Returns null if any required physical measurement is missing.
  * @param {number|null} clay - Clay percentage (0-100)
  * @param {number|null} sand - Sand percentage (0-100)
  * @param {number|null} silt - Silt percentage (0-100)
- * @returns {string} Estimated soil texture classification
+ * @returns {string|null} Estimated soil texture classification or null
  */
 const deriveSoilTexture = (clay, sand, silt) => {
-  if (clay === null || sand === null || silt === null) {
-    return 'Loam';
+  if (
+    clay === null || sand === null || silt === null ||
+    clay === undefined || sand === undefined || silt === undefined ||
+    typeof clay !== 'number' || typeof sand !== 'number' || typeof silt !== 'number'
+  ) {
+    return null;
   }
   if (clay >= 40) return 'Clay';
   if (sand >= 85) return 'Sand';
@@ -105,6 +110,7 @@ class SoilGridsProvider {
         return {
           status: 'unavailable',
           source: 'ISRIC SoilGrids',
+          reason: response.status === 429 ? 'rate_limit' : 'provider_error',
           verifiedAt: null,
           data: null,
           error: `Provider responded with status ${response.status}`,
@@ -130,6 +136,26 @@ class SoilGridsProvider {
       const rawSilt = extractLayerMean('silt');
       const rawSoc = extractLayerMean('soc');
 
+      // Detect when all primary soil measurements are null (ISRIC global urban/water NoData mask)
+      const allPrimaryNull =
+        rawPh === null &&
+        rawClay === null &&
+        rawSand === null &&
+        rawSilt === null &&
+        rawSoc === null;
+
+      if (allPrimaryNull) {
+        // Do NOT save NoData responses to stale cache
+        return {
+          status: 'unavailable',
+          source: 'ISRIC SoilGrids',
+          reason: 'urban_mask',
+          verifiedAt: null,
+          data: null,
+          error: 'Location is within an urban built-up area or water body masked by ISRIC SoilGrids',
+        };
+      }
+
       const ph = rawPh !== null ? Math.round((rawPh / 10) * 10) / 10 : null;
       const clayPercentage = rawClay !== null ? Math.round((rawClay / 10) * 10) / 10 : null;
       const sandPercentage = rawSand !== null ? Math.round((rawSand / 10) * 10) / 10 : null;
@@ -154,7 +180,7 @@ class SoilGridsProvider {
         },
       };
 
-      // Save to stale cache
+      // Save to stale cache only when valid measurements exist
       this.saveStale(key, result);
 
       return result;
@@ -171,6 +197,7 @@ class SoilGridsProvider {
       return {
         status: 'unavailable',
         source: 'ISRIC SoilGrids',
+        reason: err.name === 'TimeoutError' ? 'timeout' : 'connection_error',
         verifiedAt: null,
         data: null,
         error: err.name === 'TimeoutError' ? 'Provider request timed out' : 'Provider connection failed',
@@ -179,4 +206,7 @@ class SoilGridsProvider {
   }
 }
 
-module.exports = new SoilGridsProvider();
+const soilGridsProvider = new SoilGridsProvider();
+soilGridsProvider.deriveSoilTexture = deriveSoilTexture;
+
+module.exports = soilGridsProvider;

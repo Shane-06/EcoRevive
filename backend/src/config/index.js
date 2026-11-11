@@ -120,6 +120,8 @@ const config = {
     soilGrids: {
       baseUrl: process.env.SOILGRIDS_BASE_URL || 'https://rest.isric.org/soilgrids/v2.0/properties/query',
       timeoutMs: parseInt(process.env.SOILGRIDS_TIMEOUT_MS || process.env.PROVIDER_TIMEOUT_MS || '15000', 10),
+      enableRegionalBaseline: process.env.SOILGRIDS_ENABLE_REGIONAL_BASELINE !== 'false',
+      regionalDistanceKm: parseFloat(process.env.SOILGRIDS_REGIONAL_DISTANCE_KM || '10'),
     },
   },
   ai: {

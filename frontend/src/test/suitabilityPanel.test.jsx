@@ -118,4 +118,34 @@ describe('Milestone 14 — SuitabilityPanel Component Tests', () => {
     expect(within(overallBadge).getByText('Insufficient Data')).toBeInTheDocument();
     expect(screen.getByText('Soil data unavailable from external provider.')).toBeInTheDocument();
   });
+
+  it('Milestone 15: should render partial assessment notice with actionable recommendation when isPartial is true', () => {
+    const data = {
+      species: 'Neem',
+      location: { latitude: 30.65, longitude: 76.82 },
+      overall: {
+        status: 'insufficient_data',
+        isPartial: true,
+        explanation: 'Partial assessment: Sunlight, moisture, and spacing requirements for Neem are compatible, but soil constraints are unverified.',
+        recommendation: 'Verify local soil conditions (pH and texture) before planting.',
+      },
+      checks: {
+        soil: {
+          status: 'insufficient_data',
+          reason: 'Soil data unavailable from external provider (ISRIC SoilGrids urban mask).',
+        },
+        sunlight: { status: 'suitable', reason: 'Open sunlight met.' },
+        water: { status: 'suitable', reason: 'Water requirement met.' },
+        spacing: { status: 'suitable', reason: 'Spacing requirement met.' },
+      },
+    };
+
+    render(<SuitabilityPanel suitability={data} />);
+
+    expect(screen.getByTestId('overall-status-insufficient_data')).toBeInTheDocument();
+    expect(screen.getByTestId('partial-assessment-notice')).toBeInTheDocument();
+    expect(screen.getByText(/Actionable Urban Forestry Notice/i)).toBeInTheDocument();
+    expect(screen.getByText(/Verify local soil conditions \(pH and texture\) before planting\./i)).toBeInTheDocument();
+    expect(screen.getByText(/Sunlight, moisture, and spacing requirements for Neem are compatible/i)).toBeInTheDocument();
+  });
 });

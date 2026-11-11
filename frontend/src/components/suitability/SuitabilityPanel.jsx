@@ -1,4 +1,4 @@
-import { CheckCircle2, AlertTriangle, XCircle, HelpCircle, ShieldAlert, Sparkles, Layers, Sun, Droplets, MoveHorizontal, RefreshCw } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, XCircle, HelpCircle, ShieldAlert, Sparkles, Layers, Sun, Droplets, MoveHorizontal, RefreshCw, Info } from 'lucide-react';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorAlert from '../common/ErrorAlert';
 
@@ -160,6 +160,21 @@ export default function SuitabilityPanel({
         <div className="text-xs text-charcoal-800 leading-relaxed border-t border-black/10 pt-2.5">
           {overall?.explanation || 'Evaluation completed based on biological rules.'}
         </div>
+
+        {overall?.isPartial && (
+          <div
+            data-testid="partial-assessment-notice"
+            className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-900 flex items-start gap-2.5"
+          >
+            <Info className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold text-blue-950">Actionable Urban Forestry Notice: </span>
+              <span className="text-blue-800">
+                {overall?.recommendation || 'Soil constraints are unmeasured at this urban location. Verify local soil conditions (pH and texture) before planting.'}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Component Checks Breakdown */}
