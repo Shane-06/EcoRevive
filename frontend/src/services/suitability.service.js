@@ -10,16 +10,19 @@ export const suitabilityService = {
    * @param {number|string} params.lat - Latitude coordinate
    * @param {number|string} params.lng - Longitude coordinate
    * @param {string} params.species - Species name
+   * @param {object} [options] - Optional fetch options e.g. { signal }
    * @returns {Promise<object>} Suitability assessment data
    */
-  async assessSuitability({ lat, lng, species }) {
+  async assessSuitability({ lat, lng, species }, options) {
     const query = new URLSearchParams({
       lat: String(lat),
       lng: String(lng),
       species: String(species),
     }).toString();
 
-    const response = await apiClient.get(`/suitability?${query}`);
+    const response = options?.signal
+      ? await apiClient.get(`/suitability?${query}`, options)
+      : await apiClient.get(`/suitability?${query}`);
     return response.data;
   },
 };

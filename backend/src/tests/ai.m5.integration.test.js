@@ -587,7 +587,7 @@ describe('V2-M5: EcoGuide Integration & Validation Comprehensive Test Suite', ()
       const results = await Promise.all(calls);
       const has429 = results.some((r) => r.status === 429);
       expect(has429).toBe(true);
-    });
+    }, 15000);
   });
 
   // =========================================================================

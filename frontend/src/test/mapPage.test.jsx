@@ -195,4 +195,108 @@ describe('Milestone 14 — MapPage End-to-End Integration Tests', () => {
       });
     });
   });
+
+  it('Milestone 4: should prevent duplicate initial environment queries on mount', async () => {
+    render(<MapPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Atmospheric Weather')).toBeInTheDocument();
+    });
+
+    // Exactly 1 initial query for environment
+    expect(environmentService.getEnvironment).toHaveBeenCalledTimes(1);
+    expect(suitabilityService.assessSuitability).toHaveBeenCalledTimes(1);
+  });
+
+  it('Milestone 4: should not re-query environment provider when only species selection changes', async () => {
+    render(<MapPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Atmospheric Weather')).toBeInTheDocument();
+    });
+
+    expect(environmentService.getEnvironment).toHaveBeenCalledTimes(1);
+
+    // Switch to Suitability tab
+    const suitabilityTabBtn = screen.getByRole('button', { name: /suitability/i });
+    fireEvent.click(suitabilityTabBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('suitability-panel')).toBeInTheDocument();
+    });
+
+    // Select Peepal from species selector dropdown
+    const select = screen.getByRole('combobox');
+    fireEvent.change(select, { target: { value: 'Peepal' } });
+
+    await waitFor(() => {
+      expect(suitabilityService.assessSuitability).toHaveBeenCalledWith({
+        lat: 30.65,
+        lng: 76.78,
+        species: 'Peepal',
+      });
+    });
+
+    // Environment service was NOT called again!
+    expect(environmentService.getEnvironment).toHaveBeenCalledTimes(1);
+  });
+
+  it('Milestone 4: should protect against stale responses from previous coordinate requests', async () => {
+    let resolveFirst;
+    const slowFirstPromise = new Promise((resolve) => {
+      resolveFirst = resolve;
+    });
+
+    // Mock initial load normally, then delay next call
+    render(<MapPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Atmospheric Weather')).toBeInTheDocument();
+    });
+
+    // Next call will be slow
+    environmentService.getEnvironment.mockImplementationOnce(() => slowFirstPromise);
+
+    const latInput = screen.getByPlaceholderText(/Lat/i);
+    const lngInput = screen.getByPlaceholderText(/Lng/i);
+    const assessBtn = screen.getByRole('button', { name: /assess/i });
+
+    // Submit slow request A (25.0, 75.0)
+    fireEvent.change(latInput, { target: { value: '25.0' } });
+    fireEvent.change(lngInput, { target: { value: '75.0' } });
+    fireEvent.click(assessBtn);
+
+    // Immediately submit fast request B (26.0, 76.0)
+    environmentService.getEnvironment.mockResolvedValueOnce({
+      ...mockEnvironmentData,
+      location: { latitude: 26.0, longitude: 76.0 },
+      weather: {
+        ...mockEnvironmentData.weather,
+        data: { ...mockEnvironmentData.weather.data, temperature: 99.0 },
+      },
+    });
+
+    fireEvent.change(latInput, { target: { value: '26.0' } });
+    fireEvent.change(lngInput, { target: { value: '76.0' } });
+    fireEvent.click(assessBtn);
+
+    // Fast request B finishes and renders 99 °C
+    await waitFor(() => {
+      expect(screen.getByText('99 °C')).toBeInTheDocument();
+    });
+
+    // Slow request A finishes with 11 °C later
+    resolveFirst({
+      ...mockEnvironmentData,
+      location: { latitude: 25.0, longitude: 75.0 },
+      weather: {
+        ...mockEnvironmentData.weather,
+        data: { ...mockEnvironmentData.weather.data, temperature: 11.0 },
+      },
+    });
+
+    // Stale response must be discarded; 99 °C remains
+    expect(screen.getByText('99 °C')).toBeInTheDocument();
+    expect(screen.queryByText('11 °C')).not.toBeInTheDocument();
+  });
 });

@@ -1,5 +1,7 @@
 const config = require('../config');
 
+const MAX_STALE_ENTRIES = 500;
+
 /**
  * Derives general USDA soil texture class based on clay, sand, and silt percentages.
  * @param {number|null} clay - Clay percentage (0-100)
@@ -27,6 +29,37 @@ class SoilGridsProvider {
   constructor() {
     this.baseUrl = config.providers.soilGrids.baseUrl;
     this.timeoutMs = config.providers.soilGrids.timeoutMs;
+    this.staleSoilMap = new Map();
+  }
+
+  /**
+   * Normalizes coordinates to 2 decimal places for caching (~1.1 km resolution).
+   * @param {number} lat
+   * @param {number} lng
+   * @returns {string}
+   */
+  normalizeCoords(lat, lng) {
+    return `${Number(lat).toFixed(2)}:${Number(lng).toFixed(2)}`;
+  }
+
+  /**
+   * Clears stale soil cache (used for testing).
+   */
+  clearStaleCache() {
+    this.staleSoilMap.clear();
+  }
+
+  /**
+   * Stores successful soil result in stale cache with bounded size.
+   * @param {string} key
+   * @param {object} data
+   */
+  saveStale(key, data) {
+    if (this.staleSoilMap.size >= MAX_STALE_ENTRIES) {
+      const firstKey = this.staleSoilMap.keys().next().value;
+      if (firstKey) this.staleSoilMap.delete(firstKey);
+    }
+    this.staleSoilMap.set(key, data);
   }
 
   /**
@@ -37,6 +70,8 @@ class SoilGridsProvider {
    * @returns {Promise<object>} Normalized soil section
    */
   async fetchSoil({ latitude, longitude }) {
+    const key = this.normalizeCoords(latitude, longitude);
+
     try {
       const url = new URL(this.baseUrl);
       url.searchParams.set('lat', latitude.toString());
@@ -50,10 +85,23 @@ class SoilGridsProvider {
       url.searchParams.append('value', 'mean');
 
       const response = await fetch(url.toString(), {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'EcoRevive-UrbanPlantation/1.0 (+https://ecorevive.org; contact@ecorevive.org)',
+        },
         signal: AbortSignal.timeout(this.timeoutMs),
       });
 
       if (!response.ok) {
+        const stale = this.staleSoilMap.get(key);
+        if (stale) {
+          return {
+            ...stale,
+            stale: true,
+            warning: `Provider responded with status ${response.status}. Serving cached soil properties.`,
+          };
+        }
+
         return {
           status: 'unavailable',
           source: 'ISRIC SoilGrids',
@@ -90,10 +138,11 @@ class SoilGridsProvider {
 
       const texture = deriveSoilTexture(clayPercentage, sandPercentage, siltPercentage);
 
-      return {
+      const result = {
         status: 'available',
         source: 'ISRIC SoilGrids',
         verifiedAt: new Date().toISOString(),
+        stale: false,
         data: {
           ph,
           clayPercentage,
@@ -104,7 +153,21 @@ class SoilGridsProvider {
           organicCarbonUnit: 'g/kg',
         },
       };
+
+      // Save to stale cache
+      this.saveStale(key, result);
+
+      return result;
     } catch (err) {
+      const stale = this.staleSoilMap.get(key);
+      if (stale) {
+        return {
+          ...stale,
+          stale: true,
+          warning: `SoilGrids request failed (${err.message}). Serving cached soil properties.`,
+        };
+      }
+
       return {
         status: 'unavailable',
         source: 'ISRIC SoilGrids',

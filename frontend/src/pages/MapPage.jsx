@@ -11,6 +11,7 @@ import speciesService from '../services/species.service';
 import suitabilityService from '../services/suitability.service';
 
 const DEFAULT_CENTER = { lat: 30.65, lng: 76.78 };
+const DEBOUNCE_MS = 300;
 
 /**
  * Milestone 14: Frontend Map & Environmental Information Experience.
@@ -43,7 +44,13 @@ export default function MapPage() {
   const [suitabilityLoading, setSuitabilityLoading] = useState(false);
   const [suitabilityError, setSuitabilityError] = useState(null);
 
+  // Refs for request lifecycle, debounce, and stale protection
   const lastViewportRef = useRef(null);
+  const hasInitializedRef = useRef(false);
+  const debounceTimerRef = useRef(null);
+  const envRequestIdRef = useRef(0);
+  const suitabilityRequestIdRef = useRef(0);
+  const latestCoordKeyRef = useRef(`${DEFAULT_CENTER.lat.toFixed(4)}:${DEFAULT_CENTER.lng.toFixed(4)}`);
 
   // 1. Fetch Species Catalog on Mount
   const loadSpeciesCatalog = useCallback(async () => {
@@ -53,39 +60,48 @@ export default function MapPage() {
       const data = await speciesService.getSpeciesCatalog();
       const list = data?.species || [];
       setSpeciesList(list);
-      if (list.length > 0 && !selectedSpecies) {
-        setSelectedSpecies(list[0].name);
-      }
+      setSelectedSpecies((current) => current || (list.length > 0 ? list[0].name : 'Neem'));
     } catch (err) {
       setSpeciesError(err);
     } finally {
       setSpeciesLoading(false);
     }
-  }, [selectedSpecies]);
+  }, []);
 
   useEffect(() => {
     loadSpeciesCatalog();
   }, [loadSpeciesCatalog]);
 
-  // 2. Fetch Environmental Data for Coordinates
+  // 2. Fetch Environmental Data for Coordinates with Stale Protection
   const fetchEnvironment = useCallback(async (coords) => {
     if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') return;
+    const reqId = ++envRequestIdRef.current;
+    const targetKey = `${coords.lat.toFixed(4)}:${coords.lng.toFixed(4)}`;
+    latestCoordKeyRef.current = targetKey;
+
     setEnvLoading(true);
     setEnvError(null);
     try {
       const data = await environmentService.getEnvironment({ lat: coords.lat, lng: coords.lng });
+      // Stale response protection: ignore if a newer request was dispatched
+      if (reqId !== envRequestIdRef.current) return;
       setEnvironment(data);
     } catch (err) {
+      if (reqId !== envRequestIdRef.current) return;
       setEnvError(err);
       setEnvironment(null);
     } finally {
-      setEnvLoading(false);
+      if (reqId === envRequestIdRef.current) {
+        setEnvLoading(false);
+      }
     }
   }, []);
 
-  // 3. Fetch Suitability Evaluation for Coordinates & Species
+  // 3. Fetch Suitability Evaluation for Coordinates & Species with Stale Protection
   const fetchSuitability = useCallback(async (coords, speciesName) => {
     if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number' || !speciesName) return;
+    const reqId = ++suitabilityRequestIdRef.current;
+
     setSuitabilityLoading(true);
     setSuitabilityError(null);
     try {
@@ -94,20 +110,43 @@ export default function MapPage() {
         lng: coords.lng,
         species: speciesName,
       });
+      // Stale response protection: ignore if a newer request was dispatched
+      if (reqId !== suitabilityRequestIdRef.current) return;
       setSuitability(data);
     } catch (err) {
+      if (reqId !== suitabilityRequestIdRef.current) return;
       setSuitabilityError(err);
       setSuitability(null);
     } finally {
-      setSuitabilityLoading(false);
+      if (reqId === suitabilityRequestIdRef.current) {
+        setSuitabilityLoading(false);
+      }
     }
   }, []);
 
-  // Run initial environment and suitability query on mount
+  // Central Coordinator Trigger
+  const triggerAssessment = useCallback(
+    (coords, speciesName) => {
+      if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') return;
+      fetchEnvironment(coords);
+      if (speciesName) {
+        fetchSuitability(coords, speciesName);
+      }
+    },
+    [fetchEnvironment, fetchSuitability]
+  );
+
+  // Run initial environment and suitability query on mount (preventing duplicate requests)
   useEffect(() => {
-    fetchEnvironment(DEFAULT_CENTER);
-    fetchSuitability(DEFAULT_CENTER, 'Neem');
-  }, [fetchEnvironment, fetchSuitability]);
+    if (!hasInitializedRef.current) {
+      hasInitializedRef.current = true;
+      triggerAssessment(DEFAULT_CENTER, 'Neem');
+    }
+
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
+  }, [triggerAssessment]);
 
   // 4. Handle Viewport Change (Fetch verified trees in bounding box)
   const handleViewportChange = useCallback(async (bounds) => {
@@ -127,21 +166,25 @@ export default function MapPage() {
     }
   }, []);
 
-  // 5. Handle Location Selection on Map
+  // 5. Handle Location Selection on Map (Debounced 300ms for rapid clicks)
   const handleSelectLocation = useCallback(
     (coords) => {
+      // Immediate UI update for pin responsiveness
       setSelectedLocation(coords);
       setSelectedTree(null);
       setInputLat(String(coords.lat));
       setInputLng(String(coords.lng));
       setCoordError(null);
 
-      fetchEnvironment(coords);
-      if (selectedSpecies) {
-        fetchSuitability(coords, selectedSpecies);
+      // Debounce network queries
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
       }
+      debounceTimerRef.current = setTimeout(() => {
+        triggerAssessment(coords, selectedSpecies);
+      }, DEBOUNCE_MS);
     },
-    [fetchEnvironment, fetchSuitability, selectedSpecies]
+    [selectedSpecies, triggerAssessment]
   );
 
   // 6. Handle Tree Marker Click
@@ -153,15 +196,20 @@ export default function MapPage() {
       setInputLat(String(tree.latitude));
       setInputLng(String(tree.longitude));
 
-      fetchEnvironment(coords);
       const speciesName = tree.species || selectedSpecies || 'Neem';
       setSelectedSpecies(speciesName);
-      fetchSuitability(coords, speciesName);
+
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      debounceTimerRef.current = setTimeout(() => {
+        triggerAssessment(coords, speciesName);
+      }, DEBOUNCE_MS);
     },
-    [fetchEnvironment, fetchSuitability, selectedSpecies]
+    [selectedSpecies, triggerAssessment]
   );
 
-  // 7. Handle Species Change
+  // 7. Handle Species Change (Avoid unnecessary environment-provider requests)
   const handleSelectSpecies = (speciesName) => {
     setSelectedSpecies(speciesName);
     if (selectedLocation) {
@@ -169,7 +217,7 @@ export default function MapPage() {
     }
   };
 
-  // 8. Handle Manual Coordinate Input Submit
+  // 8. Handle Manual Coordinate Input Submit (Immediate evaluation)
   const handleCoordinateSubmit = (e) => {
     e.preventDefault();
     const lat = parseFloat(inputLat.trim());
@@ -185,7 +233,14 @@ export default function MapPage() {
     }
 
     setCoordError(null);
-    handleSelectLocation({ lat, lng });
+    const coords = { lat, lng };
+    setSelectedLocation(coords);
+    setSelectedTree(null);
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    triggerAssessment(coords, selectedSpecies);
   };
 
   return (
@@ -233,7 +288,15 @@ export default function MapPage() {
           </button>
           <button
             type="button"
-            onClick={() => handleSelectLocation(DEFAULT_CENTER)}
+            onClick={() => {
+              if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+              setSelectedLocation(DEFAULT_CENTER);
+              setSelectedTree(null);
+              setInputLat(String(DEFAULT_CENTER.lat));
+              setInputLng(String(DEFAULT_CENTER.lng));
+              setCoordError(null);
+              triggerAssessment(DEFAULT_CENTER, selectedSpecies);
+            }}
             title="Reset to Chandigarh Baseline"
             className="p-1.5 rounded-xl bg-warm-200 hover:bg-warm-300 text-charcoal-700 border border-warm-300 transition-colors"
           >
@@ -324,7 +387,7 @@ export default function MapPage() {
                 environment={environment}
                 loading={envLoading}
                 error={envError}
-                onRefresh={() => fetchEnvironment(selectedLocation)}
+                onRefresh={() => triggerAssessment(selectedLocation, selectedSpecies)}
               />
             )}
 

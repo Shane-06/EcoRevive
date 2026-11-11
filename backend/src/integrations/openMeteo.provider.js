@@ -1,5 +1,9 @@
 const config = require('../config');
 
+const USER_AGENT = 'EcoRevive-UrbanPlantation/1.0 (+https://ecorevive.org; contact@ecorevive.org)';
+const DEFAULT_COOLDOWN_SECONDS = 60;
+const MAX_STALE_ENTRIES = 500;
+
 /**
  * Maps WMO Weather interpretation codes to human-readable descriptions.
  * @param {number} code - WMO weather code
@@ -23,6 +27,86 @@ class OpenMeteoProvider {
   constructor() {
     this.baseUrl = config.providers.openMeteo.baseUrl;
     this.timeoutMs = config.providers.openMeteo.timeoutMs;
+    this.cooldownUntil = 0;
+    this.staleWeatherMap = new Map();
+  }
+
+  /**
+   * Normalizes coordinates to 2 decimal places for caching (~1.1 km resolution).
+   * @param {number} lat
+   * @param {number} lng
+   * @returns {string}
+   */
+  normalizeCoords(lat, lng) {
+    return `${Number(lat).toFixed(2)}:${Number(lng).toFixed(2)}`;
+  }
+
+  /**
+   * Clears active rate-limit cooldown (used for testing).
+   */
+  resetCooldown() {
+    this.cooldownUntil = 0;
+  }
+
+  /**
+   * Sets manual cooldown for testing.
+   * @param {number} ms
+   */
+  setCooldown(ms) {
+    this.cooldownUntil = Date.now() + ms;
+  }
+
+  /**
+   * Clears stale weather cache (used for testing).
+   */
+  clearStaleCache() {
+    this.staleWeatherMap.clear();
+  }
+
+  /**
+   * Returns current cooldown expiration timestamp.
+   * @returns {number}
+   */
+  getCooldownUntil() {
+    return this.cooldownUntil;
+  }
+
+  /**
+   * Stores successful weather result in stale cache with bounded size.
+   * @param {string} key
+   * @param {object} data
+   */
+  saveStale(key, data) {
+    if (this.staleWeatherMap.size >= MAX_STALE_ENTRIES) {
+      const firstKey = this.staleWeatherMap.keys().next().value;
+      if (firstKey) this.staleWeatherMap.delete(firstKey);
+    }
+    this.staleWeatherMap.set(key, data);
+  }
+
+  /**
+   * Parses the Retry-After header if present, returning seconds.
+   * @param {Headers|object} headers
+   * @returns {number}
+   */
+  parseRetryAfter(headers) {
+    if (!headers || typeof headers.get !== 'function') {
+      return DEFAULT_COOLDOWN_SECONDS;
+    }
+    const val = headers.get('retry-after');
+    if (!val) return DEFAULT_COOLDOWN_SECONDS;
+
+    const seconds = parseInt(val, 10);
+    if (!isNaN(seconds) && seconds > 0) {
+      return seconds;
+    }
+
+    const dateMs = Date.parse(val);
+    if (!isNaN(dateMs) && dateMs > Date.now()) {
+      return Math.ceil((dateMs - Date.now()) / 1000);
+    }
+
+    return DEFAULT_COOLDOWN_SECONDS;
   }
 
   /**
@@ -33,6 +117,30 @@ class OpenMeteoProvider {
    * @returns {Promise<object>} Normalized weather section
    */
   async fetchWeather({ latitude, longitude }) {
+    const key = this.normalizeCoords(latitude, longitude);
+    const now = Date.now();
+
+    // 1. Prevent requests during active HTTP 429 cooldown
+    if (now < this.cooldownUntil) {
+      const remainingSecs = Math.ceil((this.cooldownUntil - now) / 1000);
+      const stale = this.staleWeatherMap.get(key);
+      if (stale) {
+        return {
+          ...stale,
+          stale: true,
+          warning: `Open-Meteo rate limit active (HTTP 429 cooldown). Serving cached weather data (${remainingSecs}s remaining).`,
+        };
+      }
+
+      return {
+        status: 'unavailable',
+        source: 'Open-Meteo',
+        verifiedAt: null,
+        data: null,
+        error: `Open-Meteo rate limit active (HTTP 429 cooldown). Retry after ${remainingSecs}s`,
+      };
+    }
+
     try {
       const url = new URL(this.baseUrl);
       url.searchParams.set('latitude', latitude.toString());
@@ -48,10 +156,47 @@ class OpenMeteoProvider {
       url.searchParams.set('timezone', 'auto');
 
       const response = await fetch(url.toString(), {
+        headers: {
+          'User-Agent': USER_AGENT,
+          'Accept': 'application/json',
+        },
         signal: AbortSignal.timeout(this.timeoutMs),
       });
 
       if (!response.ok) {
+        // Handle HTTP 429 Rate Limit
+        if (response.status === 429) {
+          const cooldownSecs = this.parseRetryAfter(response.headers);
+          this.cooldownUntil = Date.now() + cooldownSecs * 1000;
+
+          const stale = this.staleWeatherMap.get(key);
+          if (stale) {
+            return {
+              ...stale,
+              stale: true,
+              warning: `Provider responded with status 429 (Rate limit exceeded). Serving cached weather data (${cooldownSecs}s cooldown active).`,
+            };
+          }
+
+          return {
+            status: 'unavailable',
+            source: 'Open-Meteo',
+            verifiedAt: null,
+            data: null,
+            error: `Provider responded with status 429 (Rate limit exceeded). ${cooldownSecs}s cooldown active.`,
+          };
+        }
+
+        // Other HTTP non-200 errors
+        const stale = this.staleWeatherMap.get(key);
+        if (stale) {
+          return {
+            ...stale,
+            stale: true,
+            warning: `Provider responded with status ${response.status}. Serving cached weather data.`,
+          };
+        }
+
         return {
           status: 'unavailable',
           source: 'Open-Meteo',
@@ -65,10 +210,11 @@ class OpenMeteoProvider {
       const current = json.current || {};
       const daily = json.daily || {};
 
-      return {
+      const result = {
         status: 'available',
         source: 'Open-Meteo',
         verifiedAt: new Date().toISOString(),
+        stale: false,
         data: {
           temperature: current.temperature_2m !== undefined ? current.temperature_2m : null,
           temperatureUnit: '°C',
@@ -99,7 +245,21 @@ class OpenMeteoProvider {
           },
         },
       };
+
+      // Save to stale cache
+      this.saveStale(key, result);
+
+      return result;
     } catch (err) {
+      const stale = this.staleWeatherMap.get(key);
+      if (stale) {
+        return {
+          ...stale,
+          stale: true,
+          warning: `Provider connection error (${err.message}). Serving cached weather data.`,
+        };
+      }
+
       return {
         status: 'unavailable',
         source: 'Open-Meteo',

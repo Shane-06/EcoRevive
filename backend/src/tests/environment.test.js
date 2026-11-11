@@ -49,8 +49,21 @@ describe('Milestone 7 — Environmental Information Integration Tests', () => {
     },
   };
 
+  const environmentService = require('../services/environment.service');
+
+  beforeEach(() => {
+    environmentService.clearCache();
+    openMeteoProvider.resetCooldown();
+    openMeteoProvider.clearStaleCache();
+    soilGridsProvider.clearStaleCache();
+  });
+
   afterEach(() => {
     jest.restoreAllMocks();
+    environmentService.clearCache();
+    openMeteoProvider.resetCooldown();
+    openMeteoProvider.clearStaleCache();
+    soilGridsProvider.clearStaleCache();
   });
 
   describe('Coordinate Validation (SRS-MAP-03, SRS-ENV-01)', () => {
@@ -374,6 +387,197 @@ describe('Milestone 7 — Environmental Information Integration Tests', () => {
       expect(jsonStr).not.toContain('stack');
       expect(jsonStr).not.toContain('jwt');
       expect(jsonStr).not.toContain('DATABASE_URL');
+    });
+  });
+
+  describe('Milestones 1–3: Environmental Reliability, Caching & Resiliency', () => {
+    const config = require('../config');
+
+    it('Cache Hit: should serve cached weather without re-querying Open-Meteo provider', async () => {
+      const spy = jest.spyOn(openMeteoProvider, 'fetchWeather').mockResolvedValue({
+        status: 'available',
+        source: 'Open-Meteo',
+        verifiedAt: new Date().toISOString(),
+        data: { temperature: 28.0 },
+      });
+      jest.spyOn(soilGridsProvider, 'fetchSoil').mockResolvedValue({
+        status: 'available',
+        source: 'ISRIC SoilGrids',
+        verifiedAt: new Date().toISOString(),
+        data: { ph: 7.0 },
+      });
+
+      // Call 1
+      await environmentService.getLocationEnvironment({ lat: 30.65, lng: 76.78 });
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      // Call 2 (same coordinates)
+      const res2 = await environmentService.getLocationEnvironment({ lat: 30.65, lng: 76.78 });
+      expect(spy).toHaveBeenCalledTimes(1); // Provider NOT called again
+      expect(res2.weather.data.temperature).toBe(28.0);
+    });
+
+    it('Cache Expiry: should re-query provider after weather TTL expires', async () => {
+      const spy = jest.spyOn(openMeteoProvider, 'fetchWeather').mockResolvedValue({
+        status: 'available',
+        source: 'Open-Meteo',
+        verifiedAt: new Date().toISOString(),
+        data: { temperature: 25.0 },
+      });
+      jest.spyOn(soilGridsProvider, 'fetchSoil').mockResolvedValue({
+        status: 'available',
+        source: 'ISRIC SoilGrids',
+        verifiedAt: new Date().toISOString(),
+        data: { ph: 7.0 },
+      });
+
+      await environmentService.getLocationEnvironment({ lat: 30.65, lng: 76.78 });
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      // Force cache expiry
+      const key = environmentService.normalizeCoords(30.65, 76.78);
+      const entry = environmentService.weatherCache.get(key);
+      entry.expiresAt = Date.now() - 1000;
+
+      await environmentService.getLocationEnvironment({ lat: 30.65, lng: 76.78 });
+      expect(spy).toHaveBeenCalledTimes(2); // Provider queried again
+    });
+
+    it('Coordinate Normalization: should normalize coordinates to 2 decimal places (~1.1km)', async () => {
+      const spy = jest.spyOn(openMeteoProvider, 'fetchWeather').mockResolvedValue({
+        status: 'available',
+        source: 'Open-Meteo',
+        verifiedAt: new Date().toISOString(),
+        data: { temperature: 31.0 },
+      });
+      jest.spyOn(soilGridsProvider, 'fetchSoil').mockResolvedValue({
+        status: 'available',
+        source: 'ISRIC SoilGrids',
+        verifiedAt: new Date().toISOString(),
+        data: { ph: 7.0 },
+      });
+
+      // Query 30.650123, 76.780456
+      await environmentService.getLocationEnvironment({ lat: 30.650123, lng: 76.780456 });
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      // Query 30.654999, 76.784999 (same 2-decimal rounded grid 30.65:76.78)
+      await environmentService.getLocationEnvironment({ lat: 30.654999, lng: 76.784999 });
+      expect(spy).toHaveBeenCalledTimes(1); // Reuses cache!
+    });
+
+    it('In-flight Deduplication: concurrent requests should coalesce into a single provider call', async () => {
+      let resolveWeather;
+      const delayedWeatherPromise = new Promise((resolve) => {
+        resolveWeather = resolve;
+      });
+
+      const spy = jest.spyOn(openMeteoProvider, 'fetchWeather').mockImplementation(() => delayedWeatherPromise);
+      jest.spyOn(soilGridsProvider, 'fetchSoil').mockResolvedValue({
+        status: 'available',
+        source: 'ISRIC SoilGrids',
+        verifiedAt: new Date().toISOString(),
+        data: { ph: 7.0 },
+      });
+
+      // Launch 4 simultaneous calls for the exact same point
+      const p1 = environmentService.getLocationEnvironment({ lat: 30.65, lng: 76.78 });
+      const p2 = environmentService.getLocationEnvironment({ lat: 30.65, lng: 76.78 });
+      const p3 = environmentService.getLocationEnvironment({ lat: 30.65, lng: 76.78 });
+      const p4 = environmentService.getLocationEnvironment({ lat: 30.65, lng: 76.78 });
+
+      // Resolve delayed provider
+      resolveWeather({
+        status: 'available',
+        source: 'Open-Meteo',
+        verifiedAt: new Date().toISOString(),
+        data: { temperature: 29.0 },
+      });
+
+      const [r1, r2, r3, r4] = await Promise.all([p1, p2, p3, p4]);
+
+      expect(spy).toHaveBeenCalledTimes(1); // Strictly called once!
+      expect(r1.weather.data.temperature).toBe(29.0);
+      expect(r2.weather.data.temperature).toBe(29.0);
+      expect(r3.weather.data.temperature).toBe(29.0);
+      expect(r4.weather.data.temperature).toBe(29.0);
+    });
+
+    it('Open-Meteo 429 Cooldown: should set cooldown and reject subsequent requests without network call', async () => {
+      jest.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        headers: {
+          get: (header) => (header.toLowerCase() === 'retry-after' ? '45' : null),
+        },
+      });
+
+      const result1 = await openMeteoProvider.fetchWeather({ latitude: 30.65, longitude: 76.78 });
+      expect(result1.status).toBe('unavailable');
+      expect(result1.error).toContain('429');
+      expect(openMeteoProvider.getCooldownUntil()).toBeGreaterThan(Date.now());
+
+      // Attempt second call during active cooldown (fetch mock is NOT called)
+      const fetchSpy = jest.spyOn(global, 'fetch');
+      fetchSpy.mockClear();
+      const result2 = await openMeteoProvider.fetchWeather({ latitude: 30.65, longitude: 76.78 });
+      expect(result2.status).toBe('unavailable');
+      expect(result2.error).toContain('cooldown');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('Stale Weather Fallback: should return cached stale weather when provider fails or is rate limited', async () => {
+      // 1. Initial successful query
+      jest.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockWeatherResponse,
+      });
+
+      const good = await openMeteoProvider.fetchWeather({ latitude: 30.65, longitude: 76.78 });
+      expect(good.status).toBe('available');
+      expect(good.stale).toBe(false);
+
+      // 2. Next call returns 429 rate limit
+      jest.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        headers: {
+          get: () => '60',
+        },
+      });
+
+      const staleResult = await openMeteoProvider.fetchWeather({ latitude: 30.65, longitude: 76.78 });
+      expect(staleResult.status).toBe('available');
+      expect(staleResult.stale).toBe(true);
+      expect(staleResult.data.temperature).toBe(29.4);
+      expect(staleResult.warning).toBeDefined();
+    });
+
+    it('SoilGrids Configuration: should configure default timeout to 15000 ms', () => {
+      expect(config.providers.soilGrids.timeoutMs).toBe(15000);
+      expect(soilGridsProvider.timeoutMs).toBe(15000);
+    });
+
+    it('SoilGrids Stale Fallback: should serve stale soil data if subsequent request times out', async () => {
+      // 1. Successful query
+      jest.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockSoilGridsResponse,
+      });
+
+      const good = await soilGridsProvider.fetchSoil({ latitude: 30.65, longitude: 76.78 });
+      expect(good.status).toBe('available');
+      expect(good.stale).toBe(false);
+
+      // 2. Timeout error
+      const timeoutError = new Error('The operation was aborted');
+      timeoutError.name = 'TimeoutError';
+      jest.spyOn(global, 'fetch').mockRejectedValueOnce(timeoutError);
+
+      const staleSoil = await soilGridsProvider.fetchSoil({ latitude: 30.65, longitude: 76.78 });
+      expect(staleSoil.status).toBe('available');
+      expect(staleSoil.stale).toBe(true);
+      expect(staleSoil.data.ph).toBe(7.2);
     });
   });
 });

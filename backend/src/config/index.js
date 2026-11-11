@@ -103,7 +103,7 @@ const config = {
   },
   db: {
     connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/ecorevive',
-    max: parseInt(process.env.DB_POOL_MAX || '20', 10),
+    max: parseInt(process.env.DB_POOL_MAX || (process.env.NODE_ENV === 'test' ? '5' : '10'), 10),
     idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT || '30000', 10),
     connectionTimeoutMillis: parseInt(process.env.DB_CONN_TIMEOUT || '5000', 10),
     ssl: resolveDbSslConfig(),
@@ -119,7 +119,7 @@ const config = {
     },
     soilGrids: {
       baseUrl: process.env.SOILGRIDS_BASE_URL || 'https://rest.isric.org/soilgrids/v2.0/properties/query',
-      timeoutMs: parseInt(process.env.PROVIDER_TIMEOUT_MS || '5000', 10),
+      timeoutMs: parseInt(process.env.SOILGRIDS_TIMEOUT_MS || process.env.PROVIDER_TIMEOUT_MS || '15000', 10),
     },
   },
   ai: {
@@ -134,7 +134,10 @@ const config = {
     monitoringIntervalDays: parseInt(process.env.HEALTH_MONITORING_INTERVAL_DAYS || '30', 10),
   },
   storage: {
-    provider: (process.env.STORAGE_PROVIDER || 'local').trim().toLowerCase(),
+    provider: (process.env.NODE_ENV === 'test'
+      ? (process.env.TEST_STORAGE_PROVIDER || 'local')
+      : (process.env.STORAGE_PROVIDER || 'local')
+    ).trim().toLowerCase(),
     supabaseUrl: (process.env.SUPABASE_URL || '').trim().replace(/\/+$/, ''),
     supabaseServiceRoleKey: (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim(),
     bucket: (process.env.SUPABASE_STORAGE_BUCKET || 'ecorevive-evidence').trim(),
