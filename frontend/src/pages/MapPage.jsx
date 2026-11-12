@@ -125,10 +125,16 @@ export default function MapPage() {
   }, []);
 
   // Central Coordinator Trigger
+  // Awaits environment retrieval before triggering suitability evaluation,
+  // ensuring the backend cache is populated and eliminating simultaneous duplicate calls.
   const triggerAssessment = useCallback(
-    (coords, speciesName) => {
+    async (coords, speciesName) => {
       if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') return;
-      fetchEnvironment(coords);
+      try {
+        await fetchEnvironment(coords);
+      } catch {
+        // Handled within fetchEnvironment state
+      }
       if (speciesName) {
         fetchSuitability(coords, speciesName);
       }

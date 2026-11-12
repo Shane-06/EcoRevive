@@ -116,10 +116,13 @@ const config = {
     openMeteo: {
       baseUrl: process.env.OPEN_METEO_BASE_URL || 'https://api.open-meteo.com/v1/forecast',
       timeoutMs: parseInt(process.env.PROVIDER_TIMEOUT_MS || '5000', 10),
+      freshTtlMs: parseInt(process.env.WEATHER_FRESH_TTL_MS || (30 * 60 * 1000).toString(), 10), // 30 mins
+      maxStaleMs: parseInt(process.env.WEATHER_MAX_STALE_MS || (24 * 60 * 60 * 1000).toString(), 10), // 24 hours
     },
     soilGrids: {
       baseUrl: process.env.SOILGRIDS_BASE_URL || 'https://rest.isric.org/soilgrids/v2.0/properties/query',
-      timeoutMs: parseInt(process.env.SOILGRIDS_TIMEOUT_MS || process.env.PROVIDER_TIMEOUT_MS || '15000', 10),
+      timeoutMs: parseInt(process.env.SOILGRIDS_TIMEOUT_MS || '25000', 10), // 25s bounded default
+      ttlMs: parseInt(process.env.SOIL_TTL_MS || (90 * 24 * 60 * 60 * 1000).toString(), 10), // 90 days
       enableRegionalBaseline: process.env.SOILGRIDS_ENABLE_REGIONAL_BASELINE !== 'false',
       regionalDistanceKm: parseFloat(process.env.SOILGRIDS_REGIONAL_DISTANCE_KM || '10'),
     },

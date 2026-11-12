@@ -1,4 +1,4 @@
-import { Cloud, Droplets, Wind, Thermometer, Layers, AlertCircle, CheckCircle2, Info, RefreshCw, Compass, Building2 } from 'lucide-react';
+import { Cloud, Droplets, Wind, Thermometer, Layers, AlertCircle, CheckCircle2, Info, RefreshCw, Compass, Building2, Clock } from 'lucide-react';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorAlert from '../common/ErrorAlert';
 
@@ -84,10 +84,17 @@ export default function EnvironmentPanel({
             <h3 className="font-semibold text-charcoal-900 text-sm">Atmospheric Weather</h3>
           </div>
           {weather?.status === 'available' ? (
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-forest-50 border border-forest-200 text-forest-800 text-[10px] font-bold uppercase tracking-wider">
-              <CheckCircle2 className="w-3 h-3 text-forest-600" />
-              Available ({weather.source || 'Open-Meteo'})
-            </span>
+            weather.stale ? (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-300 text-amber-800 text-[10px] font-bold uppercase tracking-wider">
+                <Clock className="w-3 h-3 text-amber-600" />
+                Cached ({weather.staleAgeHours ? `${weather.staleAgeHours}h ago` : 'Stale'})
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-forest-50 border border-forest-200 text-forest-800 text-[10px] font-bold uppercase tracking-wider">
+                <CheckCircle2 className="w-3 h-3 text-forest-600" />
+                Available ({weather.source || 'Open-Meteo'})
+              </span>
+            )
           ) : (
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-warm-200 border border-warm-400 text-charcoal-700 text-[10px] font-semibold uppercase tracking-wider">
               <AlertCircle className="w-3 h-3 text-charcoal-500" />
@@ -98,6 +105,15 @@ export default function EnvironmentPanel({
 
         {weather?.status === 'available' && weather.data ? (
           <div className="space-y-3">
+            {weather.warning && (
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
+                <Clock className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold">Cached Weather Observation: </span>
+                  <span>{weather.warning}</span>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               <div className="p-3 rounded-xl bg-warm-50 border border-warm-300 space-y-1">
                 <div className="flex items-center gap-1 text-[11px] text-charcoal-500">

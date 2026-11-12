@@ -552,9 +552,9 @@ describe('Milestone 7 — Environmental Information Integration Tests', () => {
       expect(staleResult.warning).toBeDefined();
     });
 
-    it('SoilGrids Configuration: should configure default timeout to 15000 ms', () => {
-      expect(config.providers.soilGrids.timeoutMs).toBe(15000);
-      expect(soilGridsProvider.timeoutMs).toBe(15000);
+    it('SoilGrids Configuration: should configure default timeout to 25000 ms', () => {
+      expect(config.providers.soilGrids.timeoutMs).toBe(25000);
+      expect(soilGridsProvider.timeoutMs).toBe(25000);
     });
 
     it('SoilGrids Stale Fallback: should serve stale soil data if subsequent request times out', async () => {

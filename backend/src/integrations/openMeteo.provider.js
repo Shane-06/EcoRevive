@@ -1,4 +1,7 @@
+'use strict';
+
 const config = require('../config');
+const defaultCacheRepo = require('../repositories/environmentCache.repository');
 
 const USER_AGENT = 'EcoRevive-UrbanPlantation/1.0 (+https://ecorevive.org; contact@ecorevive.org)';
 const DEFAULT_COOLDOWN_SECONDS = 60;
@@ -24,15 +27,50 @@ const getWeatherConditionDescription = (code) => {
 };
 
 class OpenMeteoProvider {
-  constructor() {
-    this.baseUrl = config.providers.openMeteo.baseUrl;
-    this.timeoutMs = config.providers.openMeteo.timeoutMs;
+  constructor(deps = {}) {
+    this.baseUrl = deps.baseUrl || config.providers.openMeteo.baseUrl;
+    this.timeoutMs = deps.timeoutMs || config.providers.openMeteo.timeoutMs;
+    this.cacheRepo = deps.cacheRepo || defaultCacheRepo;
     this.cooldownUntil = 0;
+    this.initialized = false;
+    this.initPromise = null;
+    this.instanceId = `om_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     this.staleWeatherMap = new Map();
   }
 
   /**
-   * Normalizes coordinates to 2 decimal places for caching (~1.1 km resolution).
+   * Loads persisted cooldown state from PostgreSQL on startup before outbound calls.
+   * If DB query fails, retains in-memory cooldown state.
+   * Coalesces concurrent calls on startup into a single initialization promise.
+   */
+  async ensureInitialized() {
+    if (this.initialized) return;
+    if (this.initPromise) return this.initPromise;
+
+    this.initPromise = (async () => {
+      try {
+        if (this.cacheRepo && typeof this.cacheRepo.getProviderCooldown === 'function') {
+          const cd = await this.cacheRepo.getProviderCooldown('open-meteo');
+          if (cd && cd.cooldownUntil) {
+            const dbUntil = cd.cooldownUntil.getTime();
+            if (dbUntil > this.cooldownUntil) {
+              this.cooldownUntil = dbUntil;
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[OpenMeteoProvider] Failed to load persistent cooldown:', err.message);
+      } finally {
+        this.initialized = true;
+        this.initPromise = null;
+      }
+    })();
+
+    return this.initPromise;
+  }
+
+  /**
+   * Normalizes coordinates to 2 decimal places for weather caching (~1.1 km grid).
    * @param {number} lat
    * @param {number} lng
    * @returns {string}
@@ -46,6 +84,7 @@ class OpenMeteoProvider {
    */
   resetCooldown() {
     this.cooldownUntil = 0;
+    this.initialized = true;
   }
 
   /**
@@ -54,10 +93,11 @@ class OpenMeteoProvider {
    */
   setCooldown(ms) {
     this.cooldownUntil = Date.now() + ms;
+    this.initialized = true;
   }
 
   /**
-   * Clears stale weather cache (used for testing).
+   * Clears in-memory stale weather cache (used for testing).
    */
   clearStaleCache() {
     this.staleWeatherMap.clear();
@@ -72,7 +112,7 @@ class OpenMeteoProvider {
   }
 
   /**
-   * Stores successful weather result in stale cache with bounded size.
+   * Stores successful weather result in in-memory stale cache with bounded size.
    * @param {string} key
    * @param {object} data
    */
@@ -85,7 +125,7 @@ class OpenMeteoProvider {
   }
 
   /**
-   * Parses the Retry-After header if present, returning seconds.
+   * Parses the Retry-After header safely, returning bounded seconds (1s to 86400s).
    * @param {Headers|object} headers
    * @returns {number}
    */
@@ -98,12 +138,13 @@ class OpenMeteoProvider {
 
     const seconds = parseInt(val, 10);
     if (!isNaN(seconds) && seconds > 0) {
-      return seconds;
+      return Math.max(1, Math.min(86400, seconds));
     }
 
     const dateMs = Date.parse(val);
     if (!isNaN(dateMs) && dateMs > Date.now()) {
-      return Math.ceil((dateMs - Date.now()) / 1000);
+      const diffSecs = Math.ceil((dateMs - Date.now()) / 1000);
+      return Math.max(1, Math.min(86400, diffSecs));
     }
 
     return DEFAULT_COOLDOWN_SECONDS;
@@ -117,10 +158,12 @@ class OpenMeteoProvider {
    * @returns {Promise<object>} Normalized weather section
    */
   async fetchWeather({ latitude, longitude }) {
+    await this.ensureInitialized();
+
     const key = this.normalizeCoords(latitude, longitude);
     const now = Date.now();
 
-    // 1. Prevent requests during active HTTP 429 cooldown
+    // 1. Prevent outbound calls during active HTTP 429 cooldown (in-memory fast path)
     if (now < this.cooldownUntil) {
       const remainingSecs = Math.ceil((this.cooldownUntil - now) / 1000);
       const stale = this.staleWeatherMap.get(key);
@@ -137,8 +180,58 @@ class OpenMeteoProvider {
         source: 'Open-Meteo',
         verifiedAt: null,
         data: null,
+        isRateLimited: true,
+        remainingCooldownSeconds: remainingSecs,
         error: `Open-Meteo rate limit active (HTTP 429 cooldown). Retry after ${remainingSecs}s`,
       };
+    }
+
+    // 2. Cross-instance atomic permit & persistent cooldown check
+    let permit = null;
+    if (this.cacheRepo && typeof this.cacheRepo.acquireOutboundPermit === 'function') {
+      permit = await this.cacheRepo.acquireOutboundPermit(
+        'open-meteo',
+        Math.ceil(this.timeoutMs / 1000) + 2,
+        this.instanceId
+      );
+
+      if (permit.inCooldown) {
+        if (permit.cooldownUntil) {
+          this.cooldownUntil = Math.max(this.cooldownUntil, permit.cooldownUntil.getTime());
+        }
+        const remainingSecs =
+          permit.retryAfterSeconds || Math.max(1, Math.ceil((this.cooldownUntil - Date.now()) / 1000));
+        const stale = this.staleWeatherMap.get(key);
+        if (stale) {
+          return {
+            ...stale,
+            stale: true,
+            warning: `Open-Meteo rate limit active (HTTP 429 cooldown). Serving cached weather data (${remainingSecs}s remaining).`,
+          };
+        }
+
+        return {
+          status: 'unavailable',
+          source: 'Open-Meteo',
+          verifiedAt: null,
+          data: null,
+          isRateLimited: true,
+          remainingCooldownSeconds: remainingSecs,
+          error: `Open-Meteo rate limit active (HTTP 429 cooldown). Retry after ${remainingSecs}s`,
+        };
+      }
+
+      if (!permit.granted) {
+        // Another instance is currently executing an outbound call. Check if stale is available.
+        const stale = this.staleWeatherMap.get(key);
+        if (stale) {
+          return {
+            ...stale,
+            stale: true,
+            warning: 'Concurrent backend request in-flight. Serving cached weather data.',
+          };
+        }
+      }
     }
 
     try {
@@ -169,6 +262,19 @@ class OpenMeteoProvider {
           const cooldownSecs = this.parseRetryAfter(response.headers);
           this.cooldownUntil = Date.now() + cooldownSecs * 1000;
 
+          // Persist cooldown state across restarts (retaining in-memory on DB error)
+          try {
+            if (this.cacheRepo && typeof this.cacheRepo.setProviderCooldown === 'function') {
+              await this.cacheRepo.setProviderCooldown(
+                'open-meteo',
+                cooldownSecs,
+                'Open-Meteo HTTP 429 rate limit exceeded'
+              );
+            }
+          } catch (persistErr) {
+            console.error('[OpenMeteoProvider] Failed to persist cooldown:', persistErr.message);
+          }
+
           const stale = this.staleWeatherMap.get(key);
           if (stale) {
             return {
@@ -183,6 +289,8 @@ class OpenMeteoProvider {
             source: 'Open-Meteo',
             verifiedAt: null,
             data: null,
+            isRateLimited: true,
+            remainingCooldownSeconds: cooldownSecs,
             error: `Provider responded with status 429 (Rate limit exceeded). ${cooldownSecs}s cooldown active.`,
           };
         }
@@ -246,7 +354,7 @@ class OpenMeteoProvider {
         },
       };
 
-      // Save to stale cache
+      // Save to in-memory stale cache
       this.saveStale(key, result);
 
       return result;
@@ -267,8 +375,20 @@ class OpenMeteoProvider {
         data: null,
         error: err.name === 'TimeoutError' ? 'Provider request timed out' : 'Provider connection failed',
       };
+    } finally {
+      if (permit && permit.granted && permit.permitHolder && typeof this.cacheRepo?.releaseOutboundPermit === 'function') {
+        try {
+          await this.cacheRepo.releaseOutboundPermit('open-meteo', permit.permitHolder);
+        } catch {
+          // Non-critical cleanup
+        }
+      }
     }
   }
 }
 
-module.exports = new OpenMeteoProvider();
+const openMeteoProvider = new OpenMeteoProvider();
+openMeteoProvider.OpenMeteoProvider = OpenMeteoProvider;
+openMeteoProvider.getWeatherConditionDescription = getWeatherConditionDescription;
+
+module.exports = openMeteoProvider;

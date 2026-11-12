@@ -1,6 +1,59 @@
+'use strict';
+
 const config = require('../config');
 
 const MAX_STALE_ENTRIES = 500;
+
+/**
+ * Computes an approximate localized WGS84 geographic spatial grid bucket (~250m nominal resolution).
+ * 
+ * SCIENTIFIC CAVEAT & PROJECTION NOTICE:
+ * The official ISRIC SoilGrids v2.0 REST API operates on WGS84 coordinates but its underlying global
+ * raster layers are projected in Interrupted Goode Homolosine (IGH / EPSG:152160). The REST API
+ * does NOT expose internal raster cell identifiers or pixel coordinates in its GeoJSON response.
+ * Converting WGS84 coordinates to exact Goode Homolosine raster cell coordinates requires full PROJ.4
+ * interrupted lobe projection engines.
+ * 
+ * This calculation provides a conservative LOCALIZED WGS84 SPATIAL CACHE BUCKET (~250m nominal size)
+ * to prevent duplicate outbound network requests and bound cache lifetime. It does NOT establish
+ * authoritative SoilGrids internal raster-cell identity.
+ * 
+ * In WGS84 coordinates:
+ * - 1 degree latitude ≈ 110,574 meters (constant meridional distance)
+ * - deltaLat for nominal 250m = 250 / 110574 ≈ 0.00226093 degrees
+ * - deltaLng for nominal 250m at latitude phi = 250 / (111320 * cos(phi)) degrees
+ * 
+ * @param {number} lat - Latitude in decimal degrees
+ * @param {number} lng - Longitude in decimal degrees
+ * @returns {{cellKey: string, cellIndexLat: number, cellIndexLng: number, snappedLat: number, snappedLng: number, isExactRasterCell: false, spatialMethod: string, nominalResolution: string}}
+ */
+const computeApproxSpatialCell = (lat, lng) => {
+  const parsedLat = Number(lat);
+  const parsedLng = Number(lng);
+  const deltaLat = 250.0 / 110574.0; // ~0.00226093 degrees
+  const cosLat = Math.cos((parsedLat * Math.PI) / 180.0);
+  const deltaLng = Math.abs(cosLat) > 0.001 ? 250.0 / (111320.0 * Math.abs(cosLat)) : deltaLat;
+
+  const cellIndexLat = Math.floor(parsedLat / deltaLat);
+  const cellIndexLng = Math.floor(parsedLng / deltaLng);
+
+  const snappedLat = Number(((cellIndexLat + 0.5) * deltaLat).toFixed(5));
+  const snappedLng = Number(((cellIndexLng + 0.5) * deltaLng).toFixed(5));
+
+  return {
+    cellKey: `c${cellIndexLat}:${cellIndexLng}`,
+    cellIndexLat,
+    cellIndexLng,
+    snappedLat,
+    snappedLng,
+    isExactRasterCell: false,
+    spatialMethod: 'approximate_wgs84_grid_bucket',
+    nominalResolution: '~250m (localized WGS84 approximation)',
+  };
+};
+
+// Backwards-compatible alias for existing callers
+const compute250mRasterCell = (lat, lng) => computeApproxSpatialCell(lat, lng);
 
 /**
  * Derives general USDA soil texture class based on clay, sand, and silt percentages.
@@ -31,14 +84,14 @@ const deriveSoilTexture = (clay, sand, silt) => {
 };
 
 class SoilGridsProvider {
-  constructor() {
-    this.baseUrl = config.providers.soilGrids.baseUrl;
-    this.timeoutMs = config.providers.soilGrids.timeoutMs;
+  constructor(deps = {}) {
+    this.baseUrl = deps.baseUrl || config.providers.soilGrids.baseUrl;
+    this.timeoutMs = deps.timeoutMs || config.providers.soilGrids.timeoutMs || 25000;
     this.staleSoilMap = new Map();
   }
 
   /**
-   * Normalizes coordinates to 2 decimal places for caching (~1.1 km resolution).
+   * Normalizes coordinates to 2 decimal places for legacy tests.
    * @param {number} lat
    * @param {number} lng
    * @returns {string}
@@ -48,14 +101,44 @@ class SoilGridsProvider {
   }
 
   /**
-   * Clears stale soil cache (used for testing).
+   * Computes an approximate localized WGS84 spatial grid bucket (~250m nominal resolution).
+   * @param {number} lat
+   * @param {number} lng
+   * @returns {object}
+   */
+  computeApproxSpatialCell(lat, lng) {
+    return computeApproxSpatialCell(lat, lng);
+  }
+
+  /**
+   * Backwards-compatible alias for approximate spatial cell.
+   * @param {number} lat
+   * @param {number} lng
+   * @returns {object}
+   */
+  compute250mRasterCell(lat, lng) {
+    return compute250mRasterCell(lat, lng);
+  }
+
+  /**
+   * Computes the 250m raster cell key for a given coordinate.
+   * @param {number} lat
+   * @param {number} lng
+   * @returns {string} e.g. "c13556:29412"
+   */
+  get250mCellKey(lat, lng) {
+    return compute250mRasterCell(lat, lng).cellKey;
+  }
+
+  /**
+   * Clears in-memory stale soil cache (used for testing).
    */
   clearStaleCache() {
     this.staleSoilMap.clear();
   }
 
   /**
-   * Stores successful soil result in stale cache with bounded size.
+   * Stores successful soil result in in-memory stale cache with bounded size.
    * @param {string} key
    * @param {object} data
    */
@@ -75,7 +158,7 @@ class SoilGridsProvider {
    * @returns {Promise<object>} Normalized soil section
    */
   async fetchSoil({ latitude, longitude }) {
-    const key = this.normalizeCoords(latitude, longitude);
+    const { cellKey, snappedLat, snappedLng } = compute250mRasterCell(latitude, longitude);
 
     try {
       const url = new URL(this.baseUrl);
@@ -98,7 +181,7 @@ class SoilGridsProvider {
       });
 
       if (!response.ok) {
-        const stale = this.staleSoilMap.get(key);
+        const stale = this.staleSoilMap.get(cellKey);
         if (stale) {
           return {
             ...stale,
@@ -178,14 +261,26 @@ class SoilGridsProvider {
           organicCarbon,
           organicCarbonUnit: 'g/kg',
         },
+        metadata: {
+          spatialPrecision: 'exact_query_coordinates',
+          isExactRasterCell: false,
+          spatialMethod: 'approximate_wgs84_grid_bucket',
+          nominalResolution: '~250m (localized WGS84 approximation)',
+          cellKey,
+          gridCenter: { latitude: snappedLat, longitude: snappedLng },
+          targetLocation: { latitude: Number(latitude), longitude: Number(longitude) },
+          providerCoordinates: json.geometry?.coordinates
+            ? { longitude: json.geometry.coordinates[0], latitude: json.geometry.coordinates[1] }
+            : null,
+        },
       };
 
-      // Save to stale cache only when valid measurements exist
-      this.saveStale(key, result);
+      // Save to in-memory stale cache
+      this.saveStale(cellKey, result);
 
       return result;
     } catch (err) {
-      const stale = this.staleSoilMap.get(key);
+      const stale = this.staleSoilMap.get(cellKey);
       if (stale) {
         return {
           ...stale,
@@ -207,6 +302,9 @@ class SoilGridsProvider {
 }
 
 const soilGridsProvider = new SoilGridsProvider();
+soilGridsProvider.SoilGridsProvider = SoilGridsProvider;
 soilGridsProvider.deriveSoilTexture = deriveSoilTexture;
+soilGridsProvider.computeApproxSpatialCell = computeApproxSpatialCell;
+soilGridsProvider.compute250mRasterCell = compute250mRasterCell;
 
 module.exports = soilGridsProvider;

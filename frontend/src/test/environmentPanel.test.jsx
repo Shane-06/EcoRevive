@@ -196,4 +196,37 @@ describe('Milestone 14 — EnvironmentPanel Component Tests', () => {
     expect(screen.getByText(/Clay: -- \| Sand: -- \| Silt: --/i)).toBeInTheDocument();
     expect(screen.queryByText(/^Loam$/)).not.toBeInTheDocument();
   });
+
+  it('Resilience: should render Cached badge and warning banner when weather is stale/cached within 24h', () => {
+    const cachedWeatherEnv = {
+      ...mockFullEnvironment,
+      weather: {
+        status: 'available',
+        source: 'Open-Meteo',
+        stale: true,
+        staleAgeHours: 3,
+        staleAgeSeconds: 10800,
+        warning: 'Weather data is cached from an earlier observation (observed 3h ago). External provider is temporarily rate limited or unreachable.',
+        data: {
+          temperature: 28.1,
+          temperatureUnit: '°C',
+          humidity: 58,
+          humidityUnit: '%',
+          precipitation: 0.0,
+          precipitationUnit: 'mm',
+          windSpeed: 9.5,
+          windSpeedUnit: 'km/h',
+          condition: 'Clear sky',
+          forecast: { maxTemp: 33.0, minTemp: 23.0, precipitationSum: 0.0 },
+        },
+      },
+    };
+
+    render(<EnvironmentPanel environment={cachedWeatherEnv} />);
+
+    expect(screen.getByText(/Cached \(3h ago\)/i)).toBeInTheDocument();
+    expect(screen.getByText('Cached Weather Observation:')).toBeInTheDocument();
+    expect(screen.getByText(/observed 3h ago/i)).toBeInTheDocument();
+    expect(screen.getByText('28.1 °C')).toBeInTheDocument();
+  });
 });

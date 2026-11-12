@@ -189,9 +189,13 @@ const evaluateSunlight = (rule, weatherSection) => {
   const conditionStr = condition || 'Unknown';
   const codeStr = weatherCode !== null && weatherCode !== undefined ? `WMO code ${weatherCode}` : 'unknown code';
 
+  const staleAdvisory = weatherSection.stale
+    ? ` [Advisory: Sunlight conditions evaluated from cached weather recorded at ${weatherSection.verifiedAt || 'recent observations'}${weatherSection.staleAgeHours ? ` (${weatherSection.staleAgeHours}h ago)` : ''}].`
+    : '';
+
   return {
     status: SUITABILITY_STATUS.SUITABLE,
-    reason: `Location meets open sunlight requirements (${rule.sunlight}). Current weather: ${conditionStr} (${codeStr}). Indicative V1 assessment based on general canopy requirements; long-term solar irradiance, photoperiod, and local shade obstacles are not measured.`,
+    reason: `Location meets open sunlight requirements (${rule.sunlight}). Current weather: ${conditionStr} (${codeStr}).${staleAdvisory} Indicative V1 assessment based on general canopy requirements; long-term solar irradiance, photoperiod, and local shade obstacles are not measured.`,
   };
 };
 
@@ -214,33 +218,37 @@ const evaluateWater = (rule, weatherSection) => {
   const precipVal = typeof precipitation === 'number' ? precipitation : 0;
   const waterNeed = rule.water_need || 'Moderate';
 
+  const staleAdvisory = weatherSection.stale
+    ? ` [Advisory: Water suitability estimated from cached weather recorded at ${weatherSection.verifiedAt || 'recent observations'}${weatherSection.staleAgeHours ? ` (${weatherSection.staleAgeHours}h ago)` : ''}].`
+    : '';
+
   let status = SUITABILITY_STATUS.SUITABLE;
   let reason = '';
 
   if (waterNeed === 'Low') {
     if (humidityVal >= 15) {
       status = SUITABILITY_STATUS.SUITABLE;
-      reason = `Low water requirement is supported under ambient humidity ${humidityVal}% and ${precipVal}mm precipitation. Indicative V1 assessment; does not verify groundwater table or on-site irrigation access.`;
+      reason = `Low water requirement is supported under ambient humidity ${humidityVal}% and ${precipVal}mm precipitation.${staleAdvisory} Indicative V1 assessment; does not verify groundwater table or on-site irrigation access.`;
     } else {
       status = SUITABILITY_STATUS.MODERATE;
-      reason = `Extremely arid conditions (humidity ${humidityVal}%); initial watering recommended for Low water need species ${rule.species}. Indicative V1 assessment; does not verify groundwater table or on-site irrigation access.`;
+      reason = `Extremely arid conditions (humidity ${humidityVal}%); initial watering recommended for Low water need species ${rule.species}.${staleAdvisory} Indicative V1 assessment; does not verify groundwater table or on-site irrigation access.`;
     }
   } else if (waterNeed === 'High') {
     if (humidityVal >= 50 || precipVal > 2) {
       status = SUITABILITY_STATUS.SUITABLE;
-      reason = `High water requirement is supported under ambient humidity ${humidityVal}% and ${precipVal}mm precipitation. Indicative V1 assessment; riparian proximity or regular irrigation recommended.`;
+      reason = `High water requirement is supported under ambient humidity ${humidityVal}% and ${precipVal}mm precipitation.${staleAdvisory} Indicative V1 assessment; riparian proximity or regular irrigation recommended.`;
     } else {
       status = SUITABILITY_STATUS.MODERATE;
-      reason = `Ambient moisture (humidity ${humidityVal}%, precipitation ${precipVal}mm) is low for High water need species ${rule.species}; regular supplemental irrigation or riparian access is required. Indicative V1 assessment; does not verify groundwater table or on-site irrigation access.`;
+      reason = `Ambient moisture (humidity ${humidityVal}%, precipitation ${precipVal}mm) is low for High water need species ${rule.species}; regular supplemental irrigation or riparian access is required.${staleAdvisory} Indicative V1 assessment; does not verify groundwater table or on-site irrigation access.`;
     }
   } else {
     // Moderate, Moderate-High, Low-Moderate
     if (humidityVal >= 35 || precipVal > 0) {
       status = SUITABILITY_STATUS.SUITABLE;
-      reason = `Moderate water requirement is supported under ambient humidity ${humidityVal}% and ${precipVal}mm precipitation. Indicative V1 assessment; does not verify groundwater table or on-site irrigation access.`;
+      reason = `Moderate water requirement is supported under ambient humidity ${humidityVal}% and ${precipVal}mm precipitation.${staleAdvisory} Indicative V1 assessment; does not verify groundwater table or on-site irrigation access.`;
     } else {
       status = SUITABILITY_STATUS.MODERATE;
-      reason = `Dry ambient conditions (humidity ${humidityVal}%, precipitation ${precipVal}mm) for ${waterNeed} water need species ${rule.species}; supplemental watering recommended during sapling establishment. Indicative V1 assessment; does not verify groundwater table or on-site irrigation access.`;
+      reason = `Dry ambient conditions (humidity ${humidityVal}%, precipitation ${precipVal}mm) for ${waterNeed} water need species ${rule.species}; supplemental watering recommended during sapling establishment.${staleAdvisory} Indicative V1 assessment; does not verify groundwater table or on-site irrigation access.`;
     }
   }
 
