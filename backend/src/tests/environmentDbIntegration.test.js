@@ -5,6 +5,7 @@ const path = require('path');
 const { Pool } = require('pg');
 const { EnvironmentCacheRepository } = require('../repositories/environmentCache.repository');
 const { OpenMeteoProvider } = require('../integrations/openMeteo.provider');
+const { SoilGridsProvider } = require('../integrations/soilGrids.provider');
 
 // Local PostgreSQL 17 test cluster configuration (isolated from production Supabase)
 const TEST_DB_CONFIG = {
@@ -30,6 +31,29 @@ describe('Real PostgreSQL Integration — Migration 010 & Repository Verificatio
     }
 
     if (isLocalPgAvailable) {
+      // Ensure Supabase-standard roles exist in local test environment for migration 010 DDL verification
+      try {
+        await pool.query(`
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+              CREATE ROLE anon;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+              CREATE ROLE authenticated;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+              CREATE ROLE service_role;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'postgres') THEN
+              CREATE ROLE postgres;
+            END IF;
+          END $$;
+        `);
+      } catch {
+        // Ignore if role creation is restricted on local test cluster
+      }
+
       testRepo = new EnvironmentCacheRepository({ db: pool });
     }
   });
@@ -118,6 +142,20 @@ describe('Real PostgreSQL Integration — Migration 010 & Repository Verificatio
       expect(colMap.has('retry_after_seconds')).toBe(true);
       expect(colMap.has('permit_holder')).toBe(true);
       expect(colMap.has('permit_expires_at')).toBe(true);
+    });
+
+    it('verifies RLS is enabled on both environment_cache and provider_cooldowns', async () => {
+      if (!isLocalPgAvailable) return;
+
+      const rlsRes = await pool.query(`
+        SELECT tablename, rowsecurity
+        FROM pg_tables
+        WHERE schemaname = 'public' AND tablename IN ('environment_cache', 'provider_cooldowns');
+      `);
+
+      const rlsMap = new Map(rlsRes.rows.map((r) => [r.tablename, r.rowsecurity]));
+      expect(rlsMap.get('environment_cache')).toBe(true);
+      expect(rlsMap.get('provider_cooldowns')).toBe(true);
     });
   });
 
@@ -329,6 +367,34 @@ describe('Real PostgreSQL Integration — Migration 010 & Repository Verificatio
       expect(res.isRateLimited).toBe(true);
       expect(res.remainingCooldownSeconds).toBeGreaterThan(0);
     });
+
+    it('persists and restores SoilGrids failure cooldown in PostgreSQL across fresh provider instances', async () => {
+      if (!isLocalPgAvailable) return;
+
+      // Seed active failure cooldown in PostgreSQL
+      await testRepo.setProviderCooldown('soilgrids', 60, 'SoilGrids request timed out');
+
+      const cd = await testRepo.getProviderCooldown('soilgrids');
+      expect(cd).toBeDefined();
+      expect(cd.retryAfterSeconds).toBe(60);
+      expect(cd.reason).toContain('timed out');
+      expect(cd.cooldownUntil.getTime()).toBeGreaterThan(Date.now());
+
+      // Create a fresh SoilGridsProvider instance (simulating cold boot after restart)
+      const freshSoilProvider = new SoilGridsProvider({ cacheRepo: testRepo });
+      expect(freshSoilProvider.cooldownUntil).toBe(0);
+
+      // Startup initialization restores persistent cooldown
+      await freshSoilProvider.ensureInitialized();
+      expect(freshSoilProvider.cooldownUntil).toBeGreaterThan(Date.now());
+
+      // Calling fetchSoil during active cooldown immediately refuses outbound request
+      const res = await freshSoilProvider.fetchSoil({ latitude: 30.65, longitude: 76.78 });
+      expect(res.status).toBe('unavailable');
+      expect(res.isRateLimited).toBe(true);
+      expect(res.reason).toBe('provider_cooldown');
+      expect(res.remainingCooldownSeconds).toBeGreaterThan(0);
+    });
   });
 
   // =========================================================================
@@ -339,7 +405,7 @@ describe('Real PostgreSQL Integration — Migration 010 & Repository Verificatio
       if (!isLocalPgAvailable) return;
       // Reset cooldowns and permits for clean test conditions
       await pool.query(
-        "UPDATE provider_cooldowns SET cooldown_until = '1970-01-01', permit_holder = NULL, permit_expires_at = NULL WHERE provider_name = 'open-meteo';"
+        "UPDATE provider_cooldowns SET cooldown_until = '1970-01-01', permit_holder = NULL, permit_expires_at = NULL WHERE provider_name IN ('open-meteo', 'soilgrids');"
       );
     });
 

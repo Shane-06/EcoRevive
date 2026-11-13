@@ -1,7 +1,9 @@
 'use strict';
 
 const config = require('../config');
+const defaultCacheRepo = require('../repositories/environmentCache.repository');
 
+const DEFAULT_FAILURE_COOLDOWN_SECONDS = 60;
 const MAX_STALE_ENTRIES = 500;
 
 /**
@@ -86,8 +88,46 @@ const deriveSoilTexture = (clay, sand, silt) => {
 class SoilGridsProvider {
   constructor(deps = {}) {
     this.baseUrl = deps.baseUrl || config.providers.soilGrids.baseUrl;
-    this.timeoutMs = deps.timeoutMs || config.providers.soilGrids.timeoutMs || 25000;
+    this.timeoutMs = deps.timeoutMs || config.providers.soilGrids.timeoutMs || 8000;
+    this.failureCooldownSeconds =
+      deps.failureCooldownSeconds || config.providers.soilGrids.failureCooldownSeconds || DEFAULT_FAILURE_COOLDOWN_SECONDS;
+    this.cacheRepo = deps.cacheRepo || defaultCacheRepo;
+    this.cooldownUntil = 0;
+    this.initialized = false;
+    this.initPromise = null;
+    this.instanceId = `sg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     this.staleSoilMap = new Map();
+  }
+
+  /**
+   * Loads persisted cooldown state from PostgreSQL on startup before outbound calls.
+   * If DB query fails, retains in-memory cooldown state.
+   * Coalesces concurrent calls on startup into a single initialization promise.
+   */
+  async ensureInitialized() {
+    if (this.initialized) return;
+    if (this.initPromise) return this.initPromise;
+
+    this.initPromise = (async () => {
+      try {
+        if (this.cacheRepo && typeof this.cacheRepo.getProviderCooldown === 'function') {
+          const cd = await this.cacheRepo.getProviderCooldown('soilgrids');
+          if (cd && cd.cooldownUntil) {
+            const dbUntil = cd.cooldownUntil.getTime();
+            if (dbUntil > this.cooldownUntil) {
+              this.cooldownUntil = dbUntil;
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[SoilGridsProvider] Failed to load persistent cooldown:', err.message);
+      } finally {
+        this.initialized = true;
+        this.initPromise = null;
+      }
+    })();
+
+    return this.initPromise;
   }
 
   /**
@@ -98,6 +138,58 @@ class SoilGridsProvider {
    */
   normalizeCoords(lat, lng) {
     return `${Number(lat).toFixed(2)}:${Number(lng).toFixed(2)}`;
+  }
+
+  /**
+   * Clears active rate-limit or failure cooldown (used for testing).
+   */
+  resetCooldown() {
+    this.cooldownUntil = 0;
+    this.initialized = true;
+  }
+
+  /**
+   * Sets manual cooldown for testing.
+   * @param {number} ms
+   */
+  setCooldown(ms) {
+    this.cooldownUntil = Date.now() + ms;
+    this.initialized = true;
+  }
+
+  /**
+   * Returns current cooldown expiration timestamp in milliseconds.
+   * @returns {number}
+   */
+  getCooldownUntil() {
+    return this.cooldownUntil;
+  }
+
+  /**
+   * Parses the Retry-After header safely, returning bounded seconds (30s to 86400s).
+   * @param {Headers|object} headers
+   * @returns {number}
+   */
+  parseRetryAfter(headers) {
+    const defaultSecs = this.failureCooldownSeconds || DEFAULT_FAILURE_COOLDOWN_SECONDS;
+    if (!headers || typeof headers.get !== 'function') {
+      return defaultSecs;
+    }
+    const val = headers.get('retry-after');
+    if (!val) return defaultSecs;
+
+    const seconds = parseInt(val, 10);
+    if (!isNaN(seconds) && seconds > 0) {
+      return Math.max(30, Math.min(86400, seconds));
+    }
+
+    const dateMs = Date.parse(val);
+    if (!isNaN(dateMs) && dateMs > Date.now()) {
+      const diffSecs = Math.ceil((dateMs - Date.now()) / 1000);
+      return Math.max(30, Math.min(86400, diffSecs));
+    }
+
+    return defaultSecs;
   }
 
   /**
@@ -152,13 +244,88 @@ class SoilGridsProvider {
 
   /**
    * Fetches soil property information for given coordinates from ISRIC SoilGrids v2.0.
+   * Coordinates outbound requests with atomic PostgreSQL permits and failure cooldown.
    * @param {object} coords
    * @param {number} coords.latitude - Latitude coordinate
    * @param {number} coords.longitude - Longitude coordinate
    * @returns {Promise<object>} Normalized soil section
    */
   async fetchSoil({ latitude, longitude }) {
+    await this.ensureInitialized();
     const { cellKey, snappedLat, snappedLng } = compute250mRasterCell(latitude, longitude);
+
+    // 1. Fast path: check in-memory cooldown before acquiring DB permit
+    if (Date.now() < this.cooldownUntil) {
+      const remainingSecs = Math.max(1, Math.ceil((this.cooldownUntil - Date.now()) / 1000));
+      const stale = this.staleSoilMap.get(cellKey);
+      if (stale) {
+        return {
+          ...stale,
+          stale: true,
+          warning: `SoilGrids provider in cooldown (${remainingSecs}s remaining). Serving cached soil properties.`,
+        };
+      }
+
+      return {
+        status: 'unavailable',
+        source: 'ISRIC SoilGrids',
+        verifiedAt: null,
+        data: null,
+        isRateLimited: true,
+        reason: 'provider_cooldown',
+        remainingCooldownSeconds: remainingSecs,
+        error: `SoilGrids provider failure cooldown active. Retry after ${remainingSecs}s`,
+      };
+    }
+
+    // 2. Cross-instance atomic permit & persistent cooldown check
+    let permit = null;
+    if (this.cacheRepo && typeof this.cacheRepo.acquireOutboundPermit === 'function') {
+      permit = await this.cacheRepo.acquireOutboundPermit(
+        'soilgrids',
+        Math.ceil(this.timeoutMs / 1000) + 2,
+        this.instanceId
+      );
+
+      if (permit.inCooldown) {
+        if (permit.cooldownUntil) {
+          this.cooldownUntil = Math.max(this.cooldownUntil, permit.cooldownUntil.getTime());
+        }
+        const remainingSecs =
+          permit.retryAfterSeconds || Math.max(1, Math.ceil((this.cooldownUntil - Date.now()) / 1000));
+        const stale = this.staleSoilMap.get(cellKey);
+        if (stale) {
+          return {
+            ...stale,
+            stale: true,
+            warning: `SoilGrids provider in cooldown (${remainingSecs}s remaining). Serving cached soil properties.`,
+          };
+        }
+
+        return {
+          status: 'unavailable',
+          source: 'ISRIC SoilGrids',
+          verifiedAt: null,
+          data: null,
+          isRateLimited: true,
+          reason: 'provider_cooldown',
+          remainingCooldownSeconds: remainingSecs,
+          error: `SoilGrids provider failure cooldown active. Retry after ${remainingSecs}s`,
+        };
+      }
+
+      if (!permit.granted) {
+        // Another instance is currently executing an outbound call. Check if stale is available.
+        const stale = this.staleSoilMap.get(cellKey);
+        if (stale) {
+          return {
+            ...stale,
+            stale: true,
+            warning: 'Concurrent backend request in-flight. Serving cached soil data.',
+          };
+        }
+      }
+    }
 
     try {
       const url = new URL(this.baseUrl);
@@ -181,6 +348,28 @@ class SoilGridsProvider {
       });
 
       if (!response.ok) {
+        let cooldownSecs = this.failureCooldownSeconds;
+        let isRateLimit = false;
+
+        if (response.status === 429) {
+          cooldownSecs = this.parseRetryAfter(response.headers);
+          isRateLimit = true;
+        }
+
+        this.cooldownUntil = Date.now() + cooldownSecs * 1000;
+
+        try {
+          if (this.cacheRepo && typeof this.cacheRepo.setProviderCooldown === 'function') {
+            await this.cacheRepo.setProviderCooldown(
+              'soilgrids',
+              cooldownSecs,
+              `SoilGrids HTTP ${response.status} ${isRateLimit ? 'rate limit exceeded' : 'provider outage'}`
+            );
+          }
+        } catch (persistErr) {
+          console.error('[SoilGridsProvider] Failed to persist cooldown:', persistErr.message);
+        }
+
         const stale = this.staleSoilMap.get(cellKey);
         if (stale) {
           return {
@@ -193,9 +382,11 @@ class SoilGridsProvider {
         return {
           status: 'unavailable',
           source: 'ISRIC SoilGrids',
-          reason: response.status === 429 ? 'rate_limit' : 'provider_error',
+          reason: isRateLimit ? 'rate_limit' : 'provider_error',
           verifiedAt: null,
           data: null,
+          isRateLimited: isRateLimit,
+          remainingCooldownSeconds: cooldownSecs,
           error: `Provider responded with status ${response.status}`,
         };
       }
@@ -280,6 +471,22 @@ class SoilGridsProvider {
 
       return result;
     } catch (err) {
+      const cooldownSecs = this.failureCooldownSeconds;
+      this.cooldownUntil = Date.now() + cooldownSecs * 1000;
+
+      // Persist failure cooldown across instances and restarts
+      try {
+        if (this.cacheRepo && typeof this.cacheRepo.setProviderCooldown === 'function') {
+          await this.cacheRepo.setProviderCooldown(
+            'soilgrids',
+            cooldownSecs,
+            `SoilGrids request ${err.name === 'TimeoutError' ? 'timed out' : 'failed'}: ${err.message}`
+          );
+        }
+      } catch (persistErr) {
+        console.error('[SoilGridsProvider] Failed to persist failure cooldown:', persistErr.message);
+      }
+
       const stale = this.staleSoilMap.get(cellKey);
       if (stale) {
         return {
@@ -295,8 +502,17 @@ class SoilGridsProvider {
         reason: err.name === 'TimeoutError' ? 'timeout' : 'connection_error',
         verifiedAt: null,
         data: null,
+        remainingCooldownSeconds: cooldownSecs,
         error: err.name === 'TimeoutError' ? 'Provider request timed out' : 'Provider connection failed',
       };
+    } finally {
+      if (permit && permit.granted && this.cacheRepo && typeof this.cacheRepo.releaseOutboundPermit === 'function') {
+        try {
+          await this.cacheRepo.releaseOutboundPermit('soilgrids', this.instanceId);
+        } catch (relErr) {
+          console.error('[SoilGridsProvider] Error releasing outbound permit:', relErr.message);
+        }
+      }
     }
   }
 }

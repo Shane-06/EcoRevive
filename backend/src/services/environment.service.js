@@ -304,6 +304,60 @@ class EnvironmentService {
    * @param {number} parsedLng
    * @returns {Promise<object>}
    */
+  /**
+   * Formats a stale L2 database soil record as a safe fallback payload.
+   * Preserves original observation coordinates, snaphots, and clear provenance metadata.
+   * @private
+   */
+  _formatStaleSoil(dbRow, parsedLat, parsedLng, cellKey, snappedLat, snappedLng, customWarning = '') {
+    const obsLat = Number(dbRow.latitude);
+    const obsLng = Number(dbRow.longitude);
+    const distKm = this._calculateDistanceKm(parsedLat, parsedLng, obsLat, obsLng);
+    const distMeters = Math.round(distKm * 1000);
+    const isNearbyObservation = distMeters > 15;
+    const verifiedAtMs = new Date(dbRow.verified_at).getTime();
+    const staleAgeSeconds = Math.max(0, Math.floor((Date.now() - verifiedAtMs) / 1000));
+    const staleAgeDays = Math.round((staleAgeSeconds / 86400) * 10) / 10;
+
+    const defaultWarning = `Live soil provider unavailable. Serving cached soil properties from ${new Date(dbRow.verified_at).toLocaleDateString()} (${staleAgeDays}d ago).`;
+
+    return {
+      status: 'available',
+      source: dbRow.source || 'ISRIC SoilGrids',
+      verifiedAt: new Date(dbRow.verified_at).toISOString(),
+      stale: true,
+      staleAgeSeconds,
+      staleAgeDays,
+      warning: customWarning || defaultWarning,
+      data: dbRow.data,
+      metadata: {
+        ...(dbRow.metadata || {}),
+        spatialPrecision: isNearbyObservation ? 'approximate_grid_bucket' : 'exact_coordinates',
+        isExactRasterCell: false,
+        isExactSiteMeasurement: false,
+        spatialMethod: 'approximate_wgs84_grid_bucket',
+        nominalResolution: '~250m (localized WGS84 approximation)',
+        cellKey,
+        gridCenter: { latitude: snappedLat, longitude: snappedLng },
+        targetLocation: { latitude: parsedLat, longitude: parsedLng },
+        sourceLocation: { latitude: obsLat, longitude: obsLng },
+        distanceFromObservedMeters: distMeters,
+        fromPersistentCache: true,
+        staleFallback: true,
+        scientificDisclaimer: 'Modeled ~250m raster estimation; does not represent an in-situ physical core sample.',
+      },
+    };
+  }
+
+  /**
+   * Retrieves soil properties using actual SoilGrids 250m raster cell identity.
+   * Caches exact-site measurements in L1 and L2 persistent storage (90-day TTL).
+   * In-flight promise deduplication wraps the entire retrieval to prevent race conditions.
+   * Supports persistent failure cooldown and stale L2 fallback during upstream outages.
+   * @param {number} parsedLat
+   * @param {number} parsedLng
+   * @returns {Promise<object>}
+   */
   async getSoil(parsedLat, parsedLng) {
     const { cellKey, snappedLat, snappedLng } = this.computeSoilRasterCell(parsedLat, parsedLng);
     const exactSoilKey = `soil_exact:${cellKey}`;
@@ -323,6 +377,8 @@ class EnvironmentService {
 
     const fetchPromise = (async () => {
       try {
+        let dbStaleCandidate = null;
+
         // Tier 2: Persistent L2 database cache lookup
         try {
           if (this.cacheRepo && typeof this.cacheRepo.findByGridAndType === 'function') {
@@ -363,11 +419,51 @@ class EnvironmentService {
                 }
                 this._setCache(this.soilCache, exactSoilKey, freshResult, expiresAtMs - now);
                 return freshResult;
+              } else {
+                // Hold onto expired L2 record as a candidate for stale fallback
+                dbStaleCandidate = dbRow;
               }
             }
           }
         } catch (dbErr) {
           console.error('[EnvironmentService] L2 soil cache lookup error:', dbErr.message);
+        }
+
+        // Check if SoilGrids provider is currently in cooldown (persisted across restarts)
+        try {
+          if (this.cacheRepo && typeof this.cacheRepo.getProviderCooldown === 'function') {
+            const activeCooldown = await this.cacheRepo.getProviderCooldown('soilgrids');
+            if (activeCooldown && activeCooldown.cooldownUntil && activeCooldown.cooldownUntil.getTime() > now) {
+              const remainingSecs = Math.max(1, Math.ceil((activeCooldown.cooldownUntil.getTime() - now) / 1000));
+
+              // If stale L2 record exists, serve it immediately with warning
+              if (dbStaleCandidate) {
+                return this._formatStaleSoil(
+                  dbStaleCandidate,
+                  parsedLat,
+                  parsedLng,
+                  cellKey,
+                  snappedLat,
+                  snappedLng,
+                  `SoilGrids provider in cooldown (${remainingSecs}s remaining). Serving cached soil properties.`
+                );
+              }
+
+              // Otherwise return structured unavailable immediately without hanging
+              return {
+                status: 'unavailable',
+                source: 'ISRIC SoilGrids',
+                verifiedAt: null,
+                data: null,
+                isRateLimited: true,
+                reason: 'provider_cooldown',
+                remainingCooldownSeconds: remainingSecs,
+                error: `SoilGrids provider failure cooldown active. Retry after ${remainingSecs}s`,
+              };
+            }
+          }
+        } catch (cdErr) {
+          console.error('[EnvironmentService] SoilGrids cooldown check error:', cdErr.message);
         }
 
         const result = await this.soilGridsProvider.fetchSoil({ latitude: parsedLat, longitude: parsedLng });
@@ -417,6 +513,20 @@ class EnvironmentService {
           } catch (upsertErr) {
             console.error('[EnvironmentService] Failed to upsert soil to L2 cache:', upsertErr.message);
           }
+          return result;
+        }
+
+        // Live request failed (timeout, network error, or cooldown) -> fallback to L2 stale candidate if available
+        if (dbStaleCandidate) {
+          return this._formatStaleSoil(
+            dbStaleCandidate,
+            parsedLat,
+            parsedLng,
+            cellKey,
+            snappedLat,
+            snappedLng,
+            `Live soil provider unavailable (${result.error || result.reason || 'timeout'}). Serving cached soil properties.`
+          );
         }
 
         return result;

@@ -40,3 +40,30 @@ CREATE TABLE IF NOT EXISTS provider_cooldowns (
 
 CREATE INDEX IF NOT EXISTS idx_provider_cooldowns_active 
     ON provider_cooldowns (provider_name, cooldown_until);
+
+-- ============================================================================
+-- Row Level Security (RLS) & Privilege Hardening
+-- ============================================================================
+
+-- 1. Enable Row Level Security on both tables (default-deny for non-superuser roles)
+ALTER TABLE public.environment_cache ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.provider_cooldowns ENABLE ROW LEVEL SECURITY;
+
+-- 2. Explicitly revoke all table privileges from untrusted roles and PUBLIC
+-- Crucial Security Fix: PostgreSQL TRUNCATE privileges are NOT governed by RLS!
+-- Supabase default privileges grant 'Dxtm' (TRUNCATE, REFERENCES, TRIGGER, MAINTAIN)
+-- to anon, authenticated, and service_role. Revoking ALL privileges eliminates
+-- TRUNCATE bypass risks and completely blocks unauthorized PostgREST Data API exposure.
+REVOKE ALL ON TABLE public.environment_cache FROM anon, authenticated, service_role, PUBLIC;
+REVOKE ALL ON TABLE public.provider_cooldowns FROM anon, authenticated, service_role, PUBLIC;
+
+-- 3. Explicitly revoke all sequence privileges on the SERIAL sequence
+-- Prevents unauthenticated or non-admin roles from enumerating or exhausting sequence values.
+REVOKE ALL ON SEQUENCE public.environment_cache_id_seq FROM anon, authenticated, service_role, PUBLIC;
+
+-- 4. Ensure backend direct connection role ('postgres') retains full unconstrained CRUD & sequence access
+-- In Supabase, the backend connects as the 'postgres' user, which possesses 'rolbypassrls = true'
+-- and table ownership. Explicit GRANT ALL guarantees complete operational capability.
+GRANT ALL ON TABLE public.environment_cache TO postgres;
+GRANT ALL ON TABLE public.provider_cooldowns TO postgres;
+GRANT ALL ON SEQUENCE public.environment_cache_id_seq TO postgres;

@@ -51,10 +51,19 @@ describe('Milestone 7 — Environmental Information Integration Tests', () => {
   };
 
   const environmentService = require('../services/environment.service');
+  const environmentCacheRepo = require('../repositories/environmentCache.repository');
 
   beforeEach(() => {
+    jest.spyOn(environmentCacheRepo, 'getProviderCooldown').mockResolvedValue(null);
+    jest.spyOn(environmentCacheRepo, 'findByGridAndType').mockResolvedValue(null);
+    jest.spyOn(environmentCacheRepo, 'acquireOutboundPermit').mockResolvedValue({ granted: true, inCooldown: false });
+    jest.spyOn(environmentCacheRepo, 'releaseOutboundPermit').mockResolvedValue(true);
+    jest.spyOn(environmentCacheRepo, 'setProviderCooldown').mockResolvedValue(true);
+    jest.spyOn(environmentCacheRepo, 'upsertCache').mockResolvedValue(true);
+
     environmentService.clearCache();
     openMeteoProvider.resetCooldown();
+    soilGridsProvider.resetCooldown();
     openMeteoProvider.clearStaleCache();
     soilGridsProvider.clearStaleCache();
   });
@@ -63,6 +72,7 @@ describe('Milestone 7 — Environmental Information Integration Tests', () => {
     jest.restoreAllMocks();
     environmentService.clearCache();
     openMeteoProvider.resetCooldown();
+    soilGridsProvider.resetCooldown();
     openMeteoProvider.clearStaleCache();
     soilGridsProvider.clearStaleCache();
   });
@@ -552,9 +562,9 @@ describe('Milestone 7 — Environmental Information Integration Tests', () => {
       expect(staleResult.warning).toBeDefined();
     });
 
-    it('SoilGrids Configuration: should configure default timeout to 25000 ms', () => {
-      expect(config.providers.soilGrids.timeoutMs).toBe(25000);
-      expect(soilGridsProvider.timeoutMs).toBe(25000);
+    it('SoilGrids Configuration: should configure default timeout to 8000 ms', () => {
+      expect(config.providers.soilGrids.timeoutMs).toBe(8000);
+      expect(soilGridsProvider.timeoutMs).toBe(8000);
     });
 
     it('SoilGrids Stale Fallback: should serve stale soil data if subsequent request times out', async () => {

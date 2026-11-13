@@ -828,4 +828,322 @@ describe('Environmental Assessment Resilience & Persistence Tests', () => {
       expect(regionalUpserts[0][0].cacheType).toBe('soil_regional');
     });
   });
+
+  // =========================================================================
+  // 9. SoilGrids Resilience, Failure Cooldown & Stale Fallback Tests
+  // =========================================================================
+  describe('9. SoilGrids Resilience, Failure Cooldown & Stale Fallback Tests', () => {
+    it('persists a 60-second cooldown when SoilGrids request times out', async () => {
+      const mockRepo = {
+        getProviderCooldown: jest.fn().mockResolvedValue(null),
+        acquireOutboundPermit: jest.fn().mockResolvedValue({ granted: true, inCooldown: false }),
+        releaseOutboundPermit: jest.fn().mockResolvedValue(true),
+        setProviderCooldown: jest.fn().mockResolvedValue(true),
+      };
+
+      const timeoutError = new Error('The operation was aborted due to timeout');
+      timeoutError.name = 'TimeoutError';
+      const mockFetchTimeout = jest.fn().mockRejectedValue(timeoutError);
+      global.fetch = mockFetchTimeout;
+
+      const provider = new SoilGridsProvider({
+        cacheRepo: mockRepo,
+        timeoutMs: 8000,
+        failureCooldownSeconds: 60,
+      });
+
+      const res = await provider.fetchSoil({ latitude: 30.65, longitude: 76.78 });
+
+      expect(res.status).toBe('unavailable');
+      expect(res.reason).toBe('timeout');
+      expect(res.error).toBe('Provider request timed out');
+
+      // Verify 60s failure cooldown was persisted to repository
+      expect(mockRepo.setProviderCooldown).toHaveBeenCalledTimes(1);
+      const [providerName, cooldownSecs, reason] = mockRepo.setProviderCooldown.mock.calls[0];
+      expect(providerName).toBe('soilgrids');
+      expect(cooldownSecs).toBe(60);
+      expect(reason).toContain('timed out');
+
+      // Verify in-memory cooldown was activated
+      expect(provider.cooldownUntil).toBeGreaterThan(Date.now());
+      // Verify outbound permit was released cleanly
+      expect(mockRepo.releaseOutboundPermit).toHaveBeenCalledWith('soilgrids', provider.instanceId);
+    });
+
+    it('makes zero additional provider calls during active failure cooldown', async () => {
+      const mockRepo = {
+        getProviderCooldown: jest.fn().mockResolvedValue(null),
+        acquireOutboundPermit: jest.fn().mockResolvedValue({ granted: true, inCooldown: false }),
+        releaseOutboundPermit: jest.fn().mockResolvedValue(true),
+        setProviderCooldown: jest.fn().mockResolvedValue(true),
+      };
+
+      const mockFetch = jest.fn();
+      global.fetch = mockFetch;
+
+      const provider = new SoilGridsProvider({
+        cacheRepo: mockRepo,
+        timeoutMs: 8000,
+        failureCooldownSeconds: 60,
+      });
+
+      // Set active cooldown (60 seconds)
+      provider.setCooldown(60 * 1000);
+
+      const res = await provider.fetchSoil({ latitude: 30.65, longitude: 76.78 });
+
+      // Must return unavailable with provider_cooldown reason immediately
+      expect(res.status).toBe('unavailable');
+      expect(res.isRateLimited).toBe(true);
+      expect(res.reason).toBe('provider_cooldown');
+      expect(res.remainingCooldownSeconds).toBeGreaterThan(0);
+
+      // CRITICAL: fetch must NEVER be invoked during active cooldown
+      expect(mockFetch).not.toHaveBeenCalled();
+      // Zero DB permit calls needed when in-memory cooldown is already active
+      expect(mockRepo.acquireOutboundPermit).not.toHaveBeenCalled();
+    });
+
+    it('returns stale valid soil data from L2 persistent cache during provider failure or cooldown', async () => {
+      const expiredDate = new Date(Date.now() - 5 * 24 * 3600 * 1000); // Expired 5 days ago
+      const verifiedDate = new Date(Date.now() - 100 * 24 * 3600 * 1000); // Observed 100 days ago
+
+      const validExpiredSoilData = {
+        ph: 7.1,
+        clayPercentage: 24.0,
+        sandPercentage: 42.0,
+        siltPercentage: 34.0,
+        texture: 'Loam',
+        organicCarbon: 13.0,
+      };
+
+      const mockRepo = {
+        findByGridAndType: jest.fn().mockResolvedValue({
+          grid_key: 'c13556:29412',
+          cache_type: 'soil_exact',
+          latitude: 30.65,
+          longitude: 76.78,
+          source: 'ISRIC SoilGrids',
+          status: 'available',
+          data: validExpiredSoilData,
+          metadata: { isExactRasterCell: false },
+          verified_at: verifiedDate,
+          expires_at: expiredDate,
+        }),
+        getProviderCooldown: jest.fn().mockResolvedValue({
+          cooldownUntil: new Date(Date.now() + 45 * 1000), // In active cooldown
+          retryAfterSeconds: 45,
+          reason: 'SoilGrids request timed out',
+        }),
+        upsertCache: jest.fn(),
+      };
+
+      const mockSoilProvider = {
+        computeSoilRasterCell: soilGridsProvider.compute250mRasterCell,
+        fetchSoil: jest.fn(), // Should not be called
+      };
+
+      const service = new EnvironmentService({
+        cacheRepo: mockRepo,
+        soilGridsProvider: mockSoilProvider,
+      });
+
+      const result = await service.getSoil(30.65, 76.78);
+
+      expect(result.status).toBe('available');
+      expect(result.stale).toBe(true);
+      expect(result.data).toEqual(validExpiredSoilData);
+      expect(result.warning).toContain('Serving cached soil properties');
+      expect(result.metadata.staleFallback).toBe(true);
+      expect(result.metadata.fromPersistentCache).toBe(true);
+      expect(mockSoilProvider.fetchSoil).not.toHaveBeenCalled();
+    });
+
+    it('ensures no invalid measurements or timeout responses enter environment_cache', async () => {
+      const mockRepo = {
+        findByGridAndType: jest.fn().mockResolvedValue(null),
+        getProviderCooldown: jest.fn().mockResolvedValue(null),
+        acquireOutboundPermit: jest.fn().mockResolvedValue({ granted: true, inCooldown: false }),
+        releaseOutboundPermit: jest.fn().mockResolvedValue(true),
+        setProviderCooldown: jest.fn().mockResolvedValue(true),
+        upsertCache: jest.fn(),
+      };
+
+      const mockSoilProvider = {
+        computeSoilRasterCell: soilGridsProvider.compute250mRasterCell,
+        fetchSoil: jest.fn().mockResolvedValue({
+          status: 'unavailable',
+          source: 'ISRIC SoilGrids',
+          reason: 'timeout',
+          error: 'Provider request timed out',
+          data: null,
+        }),
+      };
+
+      const service = new EnvironmentService({
+        cacheRepo: mockRepo,
+        soilGridsProvider: mockSoilProvider,
+      });
+
+      const result = await service.getSoil(30.65, 76.78);
+
+      expect(result.status).toBe('unavailable');
+      expect(result.reason).toBe('timeout');
+      // Must NEVER upsert unavailable/timeout data to environment_cache
+      expect(mockRepo.upsertCache).not.toHaveBeenCalled();
+    });
+
+    it('recovers and makes live outbound call after cooldown expires', async () => {
+      const mockRepo = {
+        getProviderCooldown: jest.fn().mockResolvedValue(null),
+        acquireOutboundPermit: jest.fn().mockResolvedValue({ granted: true, inCooldown: false }),
+        releaseOutboundPermit: jest.fn().mockResolvedValue(true),
+        setProviderCooldown: jest.fn().mockResolvedValue(true),
+        upsertCache: jest.fn().mockResolvedValue({ id: 25 }),
+      };
+
+      const validResponse = {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [76.78, 30.65] },
+        properties: {
+          layers: [
+            { name: 'phh2o', depths: [{ values: { mean: 72 } }] },
+            { name: 'clay', depths: [{ values: { mean: 250 } }] },
+            { name: 'sand', depths: [{ values: { mean: 400 } }] },
+            { name: 'silt', depths: [{ values: { mean: 350 } }] },
+            { name: 'soc', depths: [{ values: { mean: 150 } }] },
+          ],
+        },
+      };
+
+      const mockFetchSuccess = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => validResponse,
+      });
+      global.fetch = mockFetchSuccess;
+
+      const provider = new SoilGridsProvider({
+        cacheRepo: mockRepo,
+        timeoutMs: 8000,
+      });
+
+      // Cooldown expired in the past
+      provider.cooldownUntil = Date.now() - 5000;
+      provider.initialized = true;
+
+      const res = await provider.fetchSoil({ latitude: 30.65, longitude: 76.78 });
+
+      expect(res.status).toBe('available');
+      expect(res.data.ph).toBe(7.2);
+      expect(res.data.clayPercentage).toBe(25.0);
+      expect(res.data.texture).toBe('Loam');
+      expect(mockFetchSuccess).toHaveBeenCalledTimes(1);
+    });
+
+    it('coalesces concurrent requests during SoilGrids queries without outbound request storms', async () => {
+      let fetchResolve;
+      const slowFetchPromise = new Promise((resolve) => {
+        fetchResolve = resolve;
+      });
+
+      const mockFetchSlow = jest.fn().mockImplementation(() => slowFetchPromise);
+      global.fetch = mockFetchSlow;
+
+      const mockRepo = {
+        findByGridAndType: jest.fn().mockResolvedValue(null),
+        getProviderCooldown: jest.fn().mockResolvedValue(null),
+        acquireOutboundPermit: jest.fn().mockResolvedValue({ granted: true, inCooldown: false }),
+        releaseOutboundPermit: jest.fn().mockResolvedValue(true),
+        upsertCache: jest.fn().mockResolvedValue({ id: 26 }),
+      };
+
+      const validResponse = {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [76.78, 30.65] },
+        properties: {
+          layers: [
+            { name: 'phh2o', depths: [{ values: { mean: 68 } }] },
+            { name: 'clay', depths: [{ values: { mean: 220 } }] },
+            { name: 'sand', depths: [{ values: { mean: 450 } }] },
+            { name: 'silt', depths: [{ values: { mean: 330 } }] },
+            { name: 'soc', depths: [{ values: { mean: 120 } }] },
+          ],
+        },
+      };
+
+      const provider = new SoilGridsProvider({
+        cacheRepo: mockRepo,
+        timeoutMs: 8000,
+      });
+
+      const service = new EnvironmentService({
+        cacheRepo: mockRepo,
+        soilGridsProvider: provider,
+      });
+
+      // Launch 5 concurrent calls for the exact same location
+      const calls = Promise.all([
+        service.getSoil(30.65, 76.78),
+        service.getSoil(30.65, 76.78),
+        service.getSoil(30.65, 76.78),
+        service.getSoil(30.65, 76.78),
+        service.getSoil(30.65, 76.78),
+      ]);
+
+      // Release the slow fetch response
+      fetchResolve({
+        ok: true,
+        status: 200,
+        json: async () => validResponse,
+      });
+
+      const results = await calls;
+
+      // Exactly 1 outbound fetch call dispatched across all 5 requests
+      expect(mockFetchSlow).toHaveBeenCalledTimes(1);
+      // All 5 callers received identical valid data
+      expect(results).toHaveLength(5);
+      results.forEach((r) => {
+        expect(r.status).toBe('available');
+        expect(r.data.ph).toBe(6.8);
+      });
+    });
+
+    it('handles HTTP 429 on SoilGrids respecting Retry-After header bounded between 30 and 86400 seconds', async () => {
+      const mockRepo = {
+        getProviderCooldown: jest.fn().mockResolvedValue(null),
+        acquireOutboundPermit: jest.fn().mockResolvedValue({ granted: true, inCooldown: false }),
+        releaseOutboundPermit: jest.fn().mockResolvedValue(true),
+        setProviderCooldown: jest.fn().mockResolvedValue(true),
+      };
+
+      const mockFetch429 = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        headers: new Headers({ 'retry-after': '120' }),
+      });
+      global.fetch = mockFetch429;
+
+      const provider = new SoilGridsProvider({
+        cacheRepo: mockRepo,
+        timeoutMs: 8000,
+      });
+
+      const res = await provider.fetchSoil({ latitude: 30.65, longitude: 76.78 });
+
+      expect(res.status).toBe('unavailable');
+      expect(res.reason).toBe('rate_limit');
+      expect(res.isRateLimited).toBe(true);
+      expect(res.remainingCooldownSeconds).toBe(120);
+
+      // Verify 120s cooldown persisted to database
+      expect(mockRepo.setProviderCooldown).toHaveBeenCalledWith(
+        'soilgrids',
+        120,
+        expect.stringContaining('rate limit')
+      );
+    });
+  });
 });
