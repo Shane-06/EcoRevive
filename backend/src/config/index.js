@@ -83,6 +83,24 @@ function resolveTrustProxyConfig() {
   return trimmed;
 }
 
+/**
+ * Resolves CORS origin configuration securely.
+ * Strips trailing slashes, handles comma-separated domains, and normalizes origins.
+ */
+function resolveCorsOriginConfig() {
+  const raw = process.env.CORS_ORIGIN;
+  if (!raw || raw.trim() === '') {
+    return ['http://localhost:5173', 'https://eco-revive-lake.vercel.app'];
+  }
+
+  const origins = raw
+    .split(',')
+    .map((o) => o.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+
+  return origins.length === 1 ? origins[0] : origins;
+}
+
 const config = {
   env: process.env.NODE_ENV || 'development',
   isProduction: process.env.NODE_ENV === 'production',
@@ -91,11 +109,7 @@ const config = {
   appUrl: (process.env.APP_URL || process.env.PUBLIC_URL || 'http://localhost:5173').trim().replace(/\/+$/, ''),
   trustProxy: resolveTrustProxyConfig(),
   cors: {
-    origin: process.env.CORS_ORIGIN
-      ? process.env.CORS_ORIGIN.includes(',')
-        ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean)
-        : process.env.CORS_ORIGIN.trim()
-      : 'http://localhost:5173',
+    origin: resolveCorsOriginConfig(),
     credentials: true,
   },
   api: {
@@ -156,5 +170,6 @@ const config = {
 
 config.resolveDbSslConfig = resolveDbSslConfig;
 config.resolveTrustProxyConfig = resolveTrustProxyConfig;
+config.resolveCorsOriginConfig = resolveCorsOriginConfig;
 
 module.exports = config;

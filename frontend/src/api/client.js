@@ -16,11 +16,23 @@ export class ApiClientError extends Error {
 
 /**
  * Resolves the API Base URL from Vite environment variables or defaults to relative '/api/v1'.
+ * Supports both VITE_API_BASE_URL and VITE_API_URL, and normalizes paths to ensure '/api/v1' suffix.
+ * If VITE_USE_PROXY is 'true', forces relative '/api/v1' path to guarantee traffic flows through the reverse proxy.
  */
-const getBaseUrl = () => {
-  const envUrl = import.meta.env.VITE_API_BASE_URL;
+export const getBaseUrl = () => {
+  if (import.meta.env.VITE_USE_PROXY === 'true') {
+    return '/api/v1';
+  }
+  const envUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL;
   if (envUrl && typeof envUrl === 'string' && envUrl.trim() !== '') {
-    return envUrl.trim().replace(/\/+$/, '');
+    const trimmed = envUrl.trim().replace(/\/+$/, '');
+    if (!trimmed.endsWith('/api/v1')) {
+      if (trimmed.endsWith('/api')) {
+        return `${trimmed}/v1`;
+      }
+      return `${trimmed}/api/v1`;
+    }
+    return trimmed;
   }
   return '/api/v1';
 };

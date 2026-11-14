@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { apiClient, ApiClientError } from '../api/client';
+import { apiClient, ApiClientError, getBaseUrl } from '../api/client';
 import { storage } from '../utils/storage';
 import { STORAGE_KEYS } from '../utils/constants';
 
@@ -119,5 +119,52 @@ describe('Frontend Foundation — API Client Tests', () => {
       expect(err.code).toBe('NETWORK_ERROR');
       expect(err.message).toBe('Failed to fetch');
     }
+  });
+
+  describe('getBaseUrl Path & Environment Resolution', () => {
+    const originalEnv = { ...import.meta.env };
+
+    afterEach(() => {
+      import.meta.env.VITE_API_BASE_URL = originalEnv.VITE_API_BASE_URL;
+      import.meta.env.VITE_API_URL = originalEnv.VITE_API_URL;
+      import.meta.env.VITE_USE_PROXY = originalEnv.VITE_USE_PROXY;
+    });
+
+    it('defaults to /api/v1 when neither environment variable is configured', () => {
+      delete import.meta.env.VITE_API_BASE_URL;
+      delete import.meta.env.VITE_API_URL;
+      delete import.meta.env.VITE_USE_PROXY;
+      expect(getBaseUrl()).toBe('/api/v1');
+    });
+
+    it('forces relative /api/v1 path when VITE_USE_PROXY is set to true regardless of external URLs', () => {
+      import.meta.env.VITE_API_URL = 'https://ecorevive-api.onrender.com';
+      import.meta.env.VITE_USE_PROXY = 'true';
+      expect(getBaseUrl()).toBe('/api/v1');
+    });
+
+    it('resolves VITE_API_URL without suffix by appending /api/v1', () => {
+      delete import.meta.env.VITE_API_BASE_URL;
+      import.meta.env.VITE_API_URL = 'https://ecorevive-api.onrender.com';
+      expect(getBaseUrl()).toBe('https://ecorevive-api.onrender.com/api/v1');
+    });
+
+    it('preserves existing /api/v1 suffix when already present in VITE_API_URL', () => {
+      delete import.meta.env.VITE_API_BASE_URL;
+      import.meta.env.VITE_API_URL = 'https://ecorevive-api.onrender.com/api/v1';
+      expect(getBaseUrl()).toBe('https://ecorevive-api.onrender.com/api/v1');
+    });
+
+    it('handles trailing slashes cleanly', () => {
+      delete import.meta.env.VITE_API_BASE_URL;
+      import.meta.env.VITE_API_URL = 'https://ecorevive-api.onrender.com/api/v1/';
+      expect(getBaseUrl()).toBe('https://ecorevive-api.onrender.com/api/v1');
+    });
+
+    it('falls back to VITE_API_BASE_URL if VITE_API_URL is unset', () => {
+      delete import.meta.env.VITE_API_URL;
+      import.meta.env.VITE_API_BASE_URL = 'https://ecorevive-api.onrender.com';
+      expect(getBaseUrl()).toBe('https://ecorevive-api.onrender.com/api/v1');
+    });
   });
 });
