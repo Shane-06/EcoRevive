@@ -1,5 +1,6 @@
 'use strict';
 
+const config = require('../config');
 const environmentCacheRepo = require('../repositories/environmentCache.repository');
 const { isValidWeatherMeasurements, isValidSoilMeasurements } = require('../repositories/environmentCache.repository');
 const openMeteoProvider = require('../integrations/openMeteo.provider');
@@ -520,7 +521,7 @@ describe('Environmental Assessment Resilience & Persistence Tests', () => {
       expect(result.metadata.sourceLocation).toEqual({ latitude: 30.6500, longitude: 76.7800 });
     });
 
-    it('when serving cached soil for identical coordinates (<15m), flags as exact_coordinates with no displacement warning', async () => {
+    it('when serving cached soil for identical coordinates (<15m), flags as same_query_location with no displacement warning', async () => {
       const verifiedAt = new Date('2026-11-12T12:00:00Z');
       const expiresAt = new Date(Date.now() + 80 * 24 * 3600 * 1000);
       const mockSoilData = {
@@ -558,7 +559,7 @@ describe('Environmental Assessment Resilience & Persistence Tests', () => {
       const result = await service.getSoil(30.6500, 76.7800);
 
       expect(result.status).toBe('available');
-      expect(result.metadata.spatialPrecision).toBe('exact_coordinates');
+      expect(result.metadata.spatialPrecision).toBe('same_query_location');
       expect(result.metadata.distanceFromObservedMeters).toBe(0);
       expect(result.warning).toBeUndefined();
     });
@@ -1144,6 +1145,558 @@ describe('Environmental Assessment Resilience & Persistence Tests', () => {
         120,
         expect.stringContaining('rate limit')
       );
+    });
+  });
+
+  // =========================================================================
+  // 10. Hybrid Urban Soil Strategy & Under-5-Second Deadline Tests
+  // =========================================================================
+  describe('10. Hybrid Urban Soil Strategy & Under-5-Second Deadline Tests', () => {
+    it('10.1 Urban NoData detection without failure cooldown: returns urban_mask and does NOT trigger cooldown', async () => {
+      const mockAllNullUrbanResponse = {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [76.78, 30.65] },
+        properties: {
+          layers: [
+            { name: 'phh2o', depths: [{ depths: [], values: { mean: null } }] },
+            { name: 'clay', depths: [{ depths: [], values: { mean: null } }] },
+            { name: 'sand', depths: [{ depths: [], values: { mean: null } }] },
+            { name: 'silt', depths: [{ depths: [], values: { mean: null } }] },
+            { name: 'soc', depths: [{ depths: [], values: { mean: null } }] },
+          ],
+        },
+      };
+
+      const mockRepo = {
+        getProviderCooldown: jest.fn().mockResolvedValue(null),
+        acquireOutboundPermit: jest.fn().mockResolvedValue({ granted: true, inCooldown: false }),
+        releaseOutboundPermit: jest.fn().mockResolvedValue(true),
+        setProviderCooldown: jest.fn().mockResolvedValue(true),
+      };
+
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => mockAllNullUrbanResponse,
+      });
+
+      const provider = new SoilGridsProvider({ cacheRepo: mockRepo });
+      const res = await provider.fetchSoil({ latitude: 30.65, longitude: 76.78 });
+
+      expect(res.status).toBe('unavailable');
+      expect(res.reason).toBe('urban_mask');
+      expect(res.data).toBeNull();
+      expect(res.error).toContain('urban built-up area');
+
+      // CRITICAL: Urban mask is an expected geographic boundary, NOT a failure -> NO failure cooldown!
+      expect(provider.cooldownUntil).toBe(0);
+      expect(mockRepo.setProviderCooldown).not.toHaveBeenCalled();
+    });
+
+    it('10.2 Valid regional fallback and provenance: attaches complete directional and spatial provenance', async () => {
+      const mockRepo = {
+        findByGridAndType: jest.fn().mockResolvedValue(null),
+        getProviderCooldown: jest.fn().mockResolvedValue(null),
+        acquireOutboundPermit: jest.fn().mockResolvedValue({ granted: true, inCooldown: false }),
+        releaseOutboundPermit: jest.fn().mockResolvedValue(true),
+        upsertCache: jest.fn().mockResolvedValue({ id: 101 }),
+      };
+
+      const mockProvider = {
+        computeApproxSpatialCell: soilGridsProvider.computeApproxSpatialCell,
+        compute250mRasterCell: soilGridsProvider.compute250mRasterCell,
+        fetchSoil: jest.fn().mockImplementation(async ({ latitude, longitude }) => {
+          // Exact site (30.65, 76.82) returns urban mask
+          if (Math.abs(latitude - 30.65) < 0.01 && Math.abs(longitude - 76.82) < 0.01) {
+            return {
+              status: 'unavailable',
+              source: 'ISRIC SoilGrids',
+              reason: 'urban_mask',
+              verifiedAt: null,
+              data: null,
+              error: 'Location is within an urban built-up area',
+            };
+          }
+          // Cardinal probe North returns valid rural soil measurement
+          return {
+            status: 'available',
+            source: 'ISRIC SoilGrids',
+            verifiedAt: new Date().toISOString(),
+            stale: false,
+            data: {
+              ph: 6.8,
+              clayPercentage: 24.5,
+              sandPercentage: 42.0,
+              siltPercentage: 33.5,
+              texture: 'Loam',
+              organicCarbon: 32.0,
+            },
+          };
+        }),
+      };
+
+      const service = new EnvironmentService({
+        cacheRepo: mockRepo,
+        soilGridsProvider: mockProvider,
+        openMeteoProvider: {
+          fetchWeather: jest.fn().mockResolvedValue({
+            status: 'available',
+            source: 'Open-Meteo',
+            data: { temperature: 29.5 },
+          }),
+        },
+      });
+
+      const envResult = await service.getLocationEnvironment({
+        lat: 30.65,
+        lng: 76.82,
+        enableRegionalBaseline: true,
+      });
+
+      expect(envResult.soil.status).toBe('regional_baseline');
+      expect(envResult.soil.isRegional).toBe(true);
+      expect(envResult.soil.spatialPrecision).toBe('regional_baseline');
+      expect(envResult.soil.isExactSiteMeasurement).toBe(false);
+      expect(envResult.soil.source).toContain('Regional Baseline');
+      expect(envResult.soil.distanceKm).toBeGreaterThan(0);
+      expect(envResult.soil.direction).toBeDefined();
+      expect(envResult.soil.sampleLocation).toBeDefined();
+      expect(envResult.soil.targetLocation).toEqual({ latitude: 30.65, longitude: 76.82 });
+      expect(envResult.soil.warning).toContain('Regional soil baseline derived from nearby non-urban profile');
+      expect(envResult.soil.data.ph).toBe(6.8);
+
+      // Verifies regional cache has entry, but exact-site cache key does NOT have regional data
+      expect(service.regionalCache.has('regional:30.65:76.82')).toBe(true);
+      expect(service.soilCache.has('soil_exact:30.65:76.82')).toBe(false);
+    });
+
+    it('10.3 Timeout versus urban-mask distinction: never triggers regional probing on timeout and persists failure cooldown', async () => {
+      const mockRepo = {
+        findByGridAndType: jest.fn().mockResolvedValue(null),
+        getProviderCooldown: jest.fn().mockResolvedValue(null),
+        acquireOutboundPermit: jest.fn().mockResolvedValue({ granted: true, inCooldown: false }),
+        releaseOutboundPermit: jest.fn().mockResolvedValue(true),
+        setProviderCooldown: jest.fn().mockResolvedValue(true),
+      };
+
+      const timeoutError = new Error('The operation was aborted due to timeout');
+      timeoutError.name = 'TimeoutError';
+
+      const mockProvider = {
+        computeApproxSpatialCell: soilGridsProvider.computeApproxSpatialCell,
+        compute250mRasterCell: soilGridsProvider.compute250mRasterCell,
+        fetchSoil: jest.fn().mockResolvedValue({
+          status: 'unavailable',
+          source: 'ISRIC SoilGrids',
+          reason: 'timeout',
+          verifiedAt: null,
+          data: null,
+          error: 'Provider request timed out',
+        }),
+      };
+
+      const service = new EnvironmentService({
+        cacheRepo: mockRepo,
+        soilGridsProvider: mockProvider,
+        openMeteoProvider: {
+          fetchWeather: jest.fn().mockResolvedValue({
+            status: 'available',
+            source: 'Open-Meteo',
+            data: { temperature: 27.0 },
+          }),
+        },
+      });
+
+      const spyRegional = jest.spyOn(service, 'getRegionalSoilBaseline');
+
+      const envResult = await service.getLocationEnvironment({
+        lat: 30.65,
+        lng: 76.82,
+        enableRegionalBaseline: true,
+      });
+
+      // Must remain unavailable with timeout reason
+      expect(envResult.soil.status).toBe('unavailable');
+      expect(envResult.soil.reason).toBe('timeout');
+
+      // CRITICAL: Regional baseline probe MUST NOT be called when exact site timed out!
+      expect(spyRegional).not.toHaveBeenCalled();
+    });
+
+    it('10.4 Under-4.5-second deadline with slow probes: enforces 4,500ms ceiling and aborts in-flight requests', async () => {
+      const mockRepo = {
+        findByGridAndType: jest.fn().mockResolvedValue(null),
+        getProviderCooldown: jest.fn().mockResolvedValue(null),
+        acquireOutboundPermit: jest.fn().mockResolvedValue({ granted: true, inCooldown: false }),
+        releaseOutboundPermit: jest.fn().mockResolvedValue(true),
+      };
+
+      // Mock provider where exact site returns urban mask quickly (50ms), but probes hang for 10 seconds
+      let probeAborted = false;
+      const mockProvider = {
+        computeApproxSpatialCell: soilGridsProvider.computeApproxSpatialCell,
+        compute250mRasterCell: soilGridsProvider.compute250mRasterCell,
+        fetchSoil: jest.fn().mockImplementation(async ({ latitude, longitude, signal }) => {
+          if (Math.abs(latitude - 30.65) < 0.01 && Math.abs(longitude - 76.82) < 0.01) {
+            return {
+              status: 'unavailable',
+              source: 'ISRIC SoilGrids',
+              reason: 'urban_mask',
+              verifiedAt: null,
+              data: null,
+              error: 'Urban area',
+            };
+          }
+
+          // Probe simulation: wait for signal abort
+          return new Promise((resolve) => {
+            if (signal) {
+              signal.addEventListener('abort', () => {
+                probeAborted = true;
+                resolve({
+                  status: 'unavailable',
+                  source: 'ISRIC SoilGrids',
+                  reason: 'timeout',
+                  error: 'Aborted by deadline',
+                });
+              });
+            }
+          });
+        }),
+      };
+
+      const service = new EnvironmentService({
+        cacheRepo: mockRepo,
+        soilGridsProvider: mockProvider,
+        openMeteoProvider: {
+          fetchWeather: jest.fn().mockResolvedValue({
+            status: 'available',
+            source: 'Open-Meteo',
+            data: { temperature: 28.0 },
+          }),
+        },
+      });
+
+      // Use a test-configured short deadline (e.g. 200 ms) to verify real wall-clock abort mechanism
+      config.providers.soilGrids.overallDeadlineMs = 250;
+
+      const startTime = Date.now();
+      const envResult = await service.getLocationEnvironment({
+        lat: 30.65,
+        lng: 76.82,
+        enableRegionalBaseline: true,
+      });
+      const elapsed = Date.now() - startTime;
+
+      // Reset config
+      config.providers.soilGrids.overallDeadlineMs = 4500;
+
+      // Verify that the call returned within budget and probe was canceled
+      expect(elapsed).toBeLessThan(1000);
+      expect(envResult.weather.status).toBe('available');
+      expect(envResult.soil.status).toBe('unavailable');
+      expect(envResult.soil.reason).toBe('urban_mask');
+      expect(probeAborted).toBe(true);
+    });
+
+    it('10.5 Stale regional L2 fallback: returns cached regional baseline with stale: true during provider cooldown', async () => {
+      const expiredDate = new Date(Date.now() - 3 * 24 * 3600 * 1000); // Expired 3 days ago
+      const verifiedDate = new Date(Date.now() - 93 * 24 * 3600 * 1000); // Verified 93 days ago
+
+      const mockRepo = {
+        findByGridAndType: jest.fn().mockImplementation((key, type) => {
+          if (type === 'soil_regional') {
+            return Promise.resolve({
+              grid_key: 'c13556:29412:d10',
+              cache_type: 'soil_regional',
+              latitude: 30.65,
+              longitude: 76.82,
+              source: 'ISRIC SoilGrids (Regional Baseline)',
+              status: 'regional_baseline',
+              verified_at: verifiedDate.toISOString(),
+              expires_at: expiredDate.toISOString(),
+              data: {
+                ph: 6.9,
+                clayPercentage: 21.0,
+                sandPercentage: 46.0,
+                siltPercentage: 33.0,
+                texture: 'Loam',
+                organicCarbon: 28.0,
+              },
+              metadata: {
+                isRegional: true,
+                direction: 'North',
+                distanceKm: 9.8,
+                sampleLocation: { latitude: 30.74, longitude: 76.82 },
+                targetLocation: { latitude: 30.65, longitude: 76.82 },
+              },
+            });
+          }
+          return Promise.resolve(null);
+        }),
+        getProviderCooldown: jest.fn().mockResolvedValue({
+          cooldownUntil: new Date(Date.now() + 45000), // 45s remaining cooldown
+          retryAfterSeconds: 45,
+          reason: 'SoilGrids HTTP 429 rate limit exceeded',
+        }),
+        acquireOutboundPermit: jest.fn().mockResolvedValue({ granted: false, inCooldown: true }),
+      };
+
+      const mockProvider = {
+        computeApproxSpatialCell: soilGridsProvider.computeApproxSpatialCell,
+        compute250mRasterCell: soilGridsProvider.compute250mRasterCell,
+        fetchSoil: jest.fn(),
+      };
+
+      const service = new EnvironmentService({
+        cacheRepo: mockRepo,
+        soilGridsProvider: mockProvider,
+      });
+
+      const startTime = Date.now();
+      const regionalResult = await service.getRegionalSoilBaseline(30.65, 76.82);
+      const elapsed = Date.now() - startTime;
+
+      // Must return fast from database (< 50 ms)
+      expect(elapsed).toBeLessThan(100);
+      expect(regionalResult).toBeDefined();
+      expect(regionalResult.status).toBe('regional_baseline');
+      expect(regionalResult.isRegional).toBe(true);
+      expect(regionalResult.stale).toBe(true);
+      expect(regionalResult.staleAgeDays).toBeGreaterThanOrEqual(90);
+      expect(regionalResult.warning).toContain('cooldown');
+      expect(regionalResult.distanceKm).toBe(9.8);
+      expect(regionalResult.direction).toBe('North');
+      expect(regionalResult.data.ph).toBe(6.9);
+      expect(mockProvider.fetchSoil).not.toHaveBeenCalled();
+    });
+
+    it('10.6 Concurrent probing and permit coordination: executes probes concurrently under session permit without conflict', async () => {
+      const permitCalls = [];
+      const releaseCalls = [];
+
+      const mockRepo = {
+        findByGridAndType: jest.fn().mockResolvedValue(null),
+        getProviderCooldown: jest.fn().mockResolvedValue(null),
+        acquireOutboundPermit: jest.fn().mockImplementation((provider, lease, holder) => {
+          permitCalls.push({ provider, lease, holder });
+          return Promise.resolve({ granted: true, inCooldown: false, permitHolder: holder });
+        }),
+        releaseOutboundPermit: jest.fn().mockImplementation((provider, holder) => {
+          releaseCalls.push({ provider, holder });
+          return Promise.resolve(true);
+        }),
+        upsertCache: jest.fn().mockResolvedValue({ id: 202 }),
+      };
+
+      let abortedProbes = 0;
+      const mockProvider = {
+        computeApproxSpatialCell: soilGridsProvider.computeApproxSpatialCell,
+        compute250mRasterCell: soilGridsProvider.compute250mRasterCell,
+        fetchSoil: jest.fn().mockImplementation(async ({ latitude, _longitude, _parentPermitHolder, signal }) => {
+          // North probe finishes quickly with valid soil
+          if (latitude > 30.7) {
+            return {
+              status: 'available',
+              source: 'ISRIC SoilGrids',
+              verifiedAt: new Date().toISOString(),
+              data: { ph: 7.0, clayPercentage: 25.0, texture: 'Loam' },
+            };
+          }
+
+          // Other probes simulate slow in-flight responses that should be canceled
+          return new Promise((resolve) => {
+            if (signal) {
+              signal.addEventListener('abort', () => {
+                abortedProbes++;
+                resolve({ status: 'unavailable', reason: 'aborted' });
+              });
+            }
+          });
+        }),
+      };
+
+      const service = new EnvironmentService({
+        cacheRepo: mockRepo,
+        soilGridsProvider: mockProvider,
+      });
+
+      const res = await service.getRegionalSoilBaseline(30.65, 76.82);
+
+      expect(res).toBeDefined();
+      expect(res.status).toBe('regional_baseline');
+      expect(res.data.ph).toBe(7.0);
+
+      // Exactly 1 session permit acquired before parallel probing
+      expect(permitCalls).toHaveLength(1);
+      expect(permitCalls[0].provider).toBe('soilgrids');
+      expect(permitCalls[0].holder).toContain('sg_reg_');
+
+      // The permit holder is released exactly once in finally
+      expect(releaseCalls).toHaveLength(1);
+      expect(releaseCalls[0].holder).toBe(permitCalls[0].holder);
+
+      // Verify that losing in-flight probes were aborted
+      expect(abortedProbes).toBeGreaterThan(0);
+    });
+
+    it('10.7 Provider recovery after cooldown expiry: makes live call and recovers once cooldown threshold passes', async () => {
+      const mockRepo = {
+        getProviderCooldown: jest.fn().mockResolvedValue(null),
+        acquireOutboundPermit: jest.fn().mockResolvedValue({ granted: true, inCooldown: false }),
+        releaseOutboundPermit: jest.fn().mockResolvedValue(true),
+        setProviderCooldown: jest.fn().mockResolvedValue(true),
+      };
+
+      const validResponse = {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [76.78, 30.65] },
+        properties: {
+          layers: [
+            { name: 'phh2o', depths: [{ values: { mean: 71 } }] },
+            { name: 'clay', depths: [{ values: { mean: 230 } }] },
+            { name: 'sand', depths: [{ values: { mean: 440 } }] },
+            { name: 'silt', depths: [{ values: { mean: 330 } }] },
+            { name: 'soc', depths: [{ values: { mean: 130 } }] },
+          ],
+        },
+      };
+
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => validResponse,
+      });
+
+      const provider = new SoilGridsProvider({
+        cacheRepo: mockRepo,
+        timeoutMs: 8000,
+      });
+
+      // Expired cooldown in past
+      provider.cooldownUntil = Date.now() - 1000;
+      provider.initialized = true;
+
+      const res = await provider.fetchSoil({ latitude: 30.65, longitude: 76.78 });
+      expect(res.status).toBe('available');
+      expect(res.data.ph).toBe(7.1);
+      expect(res.stale).toBe(false);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('10.8 Verify no invalid soil values are cached: never commits NoData or urban mask to persistent cache', async () => {
+      const mockRepo = {
+        findByGridAndType: jest.fn().mockResolvedValue(null),
+        getProviderCooldown: jest.fn().mockResolvedValue(null),
+        acquireOutboundPermit: jest.fn().mockResolvedValue({ granted: true, inCooldown: false }),
+        releaseOutboundPermit: jest.fn().mockResolvedValue(true),
+        upsertCache: jest.fn().mockResolvedValue({ id: 303 }),
+      };
+
+      const mockProvider = {
+        computeApproxSpatialCell: soilGridsProvider.computeApproxSpatialCell,
+        compute250mRasterCell: soilGridsProvider.compute250mRasterCell,
+        fetchSoil: jest.fn().mockResolvedValue({
+          status: 'unavailable',
+          source: 'ISRIC SoilGrids',
+          reason: 'urban_mask',
+          verifiedAt: null,
+          data: null,
+        }),
+      };
+
+      const service = new EnvironmentService({
+        cacheRepo: mockRepo,
+        soilGridsProvider: mockProvider,
+      });
+
+      const res = await service.getSoil(30.65, 76.78);
+      expect(res.status).toBe('unavailable');
+      expect(res.reason).toBe('urban_mask');
+
+      // upsertCache must NEVER be called with unavailable or urban mask data
+      expect(mockRepo.upsertCache).not.toHaveBeenCalled();
+      // in-memory soilCache must NOT contain the entry
+      expect(service.soilCache.size).toBe(0);
+    });
+
+    it('10.9 Master deadline applies to complete response: aborts slow weather and slow soil within budget', async () => {
+      let weatherSignalReceived = null;
+      let soilSignalReceived = null;
+
+      const mockOpenMeteo = {
+        ensureInitialized: jest.fn().mockResolvedValue(),
+        getCooldownUntil: jest.fn().mockReturnValue(0),
+        fetchWeather: jest.fn().mockImplementation(({ signal }) => {
+          weatherSignalReceived = signal;
+          return new Promise((resolve) => {
+            if (signal) {
+              signal.addEventListener('abort', () => {
+                resolve({
+                  status: 'unavailable',
+                  source: 'Open-Meteo',
+                  verifiedAt: null,
+                  data: null,
+                  error: 'Provider request timed out',
+                });
+              });
+            }
+          });
+        }),
+      };
+
+      const mockSoilGrids = {
+        computeApproxSpatialCell: soilGridsProvider.computeApproxSpatialCell,
+        compute250mRasterCell: soilGridsProvider.compute250mRasterCell,
+        fetchSoil: jest.fn().mockImplementation(({ signal }) => {
+          soilSignalReceived = signal;
+          return new Promise((resolve) => {
+            if (signal) {
+              signal.addEventListener('abort', () => {
+                resolve({
+                  status: 'unavailable',
+                  source: 'ISRIC SoilGrids',
+                  reason: 'timeout',
+                  verifiedAt: null,
+                  data: null,
+                  error: 'Provider request timed out',
+                });
+              });
+            }
+          });
+        }),
+      };
+
+      const service = new EnvironmentService({
+        cacheRepo: {
+          findByGridAndType: jest.fn().mockResolvedValue(null),
+        },
+        openMeteoProvider: mockOpenMeteo,
+        soilGridsProvider: mockSoilGrids,
+      });
+
+      // Override deadlines to small test values (e.g. 50ms) to keep unit test fast
+      const origDeadline = config.providers.soilGrids.overallDeadlineMs;
+      const origExactTimeout = config.providers.soilGrids.exactTimeoutMs;
+      config.providers.soilGrids.overallDeadlineMs = 80;
+      config.providers.soilGrids.exactTimeoutMs = 60;
+
+      const t0 = Date.now();
+      try {
+        const envResult = await service.getLocationEnvironment({ lat: 30.65, lng: 76.78 });
+        const elapsed = Date.now() - t0;
+
+        expect(elapsed).toBeLessThan(300); // Finished well within test deadline
+        expect(weatherSignalReceived).toBeDefined();
+        expect(soilSignalReceived).toBeDefined();
+        expect(envResult.weather.status).toBe('unavailable');
+        expect(envResult.weather.error).toContain('timed out');
+        expect(envResult.soil.status).toBe('unavailable');
+        expect(envResult.soil.reason).toBe('timeout');
+      } finally {
+        config.providers.soilGrids.overallDeadlineMs = origDeadline;
+        config.providers.soilGrids.exactTimeoutMs = origExactTimeout;
+      }
     });
   });
 });

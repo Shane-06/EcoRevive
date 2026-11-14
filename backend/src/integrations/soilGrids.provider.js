@@ -245,14 +245,20 @@ class SoilGridsProvider {
   /**
    * Fetches soil property information for given coordinates from ISRIC SoilGrids v2.0.
    * Coordinates outbound requests with atomic PostgreSQL permits and failure cooldown.
-   * @param {object} coords
-   * @param {number} coords.latitude - Latitude coordinate
-   * @param {number} coords.longitude - Longitude coordinate
+   * Supports bounded deadlines, signal cancellation, and parent-permit coordination.
+   * @param {object} params
+   * @param {number} params.latitude - Latitude coordinate
+   * @param {number} params.longitude - Longitude coordinate
+   * @param {number} [params.timeoutMs] - Optional custom timeout in ms
+   * @param {AbortSignal} [params.signal] - Optional external AbortSignal (e.g. deadline)
+   * @param {string} [params.parentPermitHolder] - Optional parent permit holder for batch/probe sessions
    * @returns {Promise<object>} Normalized soil section
    */
-  async fetchSoil({ latitude, longitude }) {
+  async fetchSoil({ latitude, longitude, timeoutMs, signal, parentPermitHolder }) {
     await this.ensureInitialized();
     const { cellKey, snappedLat, snappedLng } = compute250mRasterCell(latitude, longitude);
+    const effectiveTimeoutMs = timeoutMs || this.timeoutMs;
+    const hasParentPermit = Boolean(parentPermitHolder);
 
     // 1. Fast path: check in-memory cooldown before acquiring DB permit
     if (Date.now() < this.cooldownUntil) {
@@ -280,11 +286,13 @@ class SoilGridsProvider {
 
     // 2. Cross-instance atomic permit & persistent cooldown check
     let permit = null;
-    if (this.cacheRepo && typeof this.cacheRepo.acquireOutboundPermit === 'function') {
+    const activePermitHolder = parentPermitHolder || this.instanceId;
+
+    if (!hasParentPermit && this.cacheRepo && typeof this.cacheRepo.acquireOutboundPermit === 'function') {
       permit = await this.cacheRepo.acquireOutboundPermit(
         'soilgrids',
-        Math.ceil(this.timeoutMs / 1000) + 2,
-        this.instanceId
+        Math.ceil(effectiveTimeoutMs / 1000) + 2,
+        activePermitHolder
       );
 
       if (permit.inCooldown) {
@@ -327,6 +335,29 @@ class SoilGridsProvider {
       }
     }
 
+    // Combine timeout timer with optional parent AbortSignal
+    const fetchAbortController = new AbortController();
+    const timeoutTimer = setTimeout(() => {
+      const tErr = new Error('The operation was aborted due to timeout');
+      tErr.name = 'TimeoutError';
+      fetchAbortController.abort(tErr);
+    }, effectiveTimeoutMs);
+
+    let removeParentSignalListener = null;
+    if (signal) {
+      if (signal.aborted) {
+        clearTimeout(timeoutTimer);
+        fetchAbortController.abort(signal.reason);
+      } else {
+        const onParentAbort = () => {
+          clearTimeout(timeoutTimer);
+          fetchAbortController.abort(signal.reason);
+        };
+        signal.addEventListener('abort', onParentAbort, { once: true });
+        removeParentSignalListener = () => signal.removeEventListener('abort', onParentAbort);
+      }
+    }
+
     try {
       const url = new URL(this.baseUrl);
       url.searchParams.set('lat', latitude.toString());
@@ -344,7 +375,7 @@ class SoilGridsProvider {
           'Accept': 'application/json',
           'User-Agent': 'EcoRevive-UrbanPlantation/1.0 (+https://ecorevive.org; contact@ecorevive.org)',
         },
-        signal: AbortSignal.timeout(this.timeoutMs),
+        signal: fetchAbortController.signal,
       });
 
       if (!response.ok) {
@@ -471,20 +502,29 @@ class SoilGridsProvider {
 
       return result;
     } catch (err) {
-      const cooldownSecs = this.failureCooldownSeconds;
-      this.cooldownUntil = Date.now() + cooldownSecs * 1000;
+      const isProbeCancellation =
+        signal &&
+        signal.aborted &&
+        signal.reason?.name !== 'TimeoutError' &&
+        signal.reason?.message !== 'SOIL_DEADLINE_EXCEEDED';
 
-      // Persist failure cooldown across instances and restarts
-      try {
-        if (this.cacheRepo && typeof this.cacheRepo.setProviderCooldown === 'function') {
-          await this.cacheRepo.setProviderCooldown(
-            'soilgrids',
-            cooldownSecs,
-            `SoilGrids request ${err.name === 'TimeoutError' ? 'timed out' : 'failed'}: ${err.message}`
-          );
+      const cooldownSecs = this.failureCooldownSeconds;
+
+      if (!isProbeCancellation) {
+        this.cooldownUntil = Date.now() + cooldownSecs * 1000;
+
+        // Persist failure cooldown across instances and restarts
+        try {
+          if (this.cacheRepo && typeof this.cacheRepo.setProviderCooldown === 'function') {
+            await this.cacheRepo.setProviderCooldown(
+              'soilgrids',
+              cooldownSecs,
+              `SoilGrids request ${err.name === 'TimeoutError' ? 'timed out' : 'failed'}: ${err.message}`
+            );
+          }
+        } catch (persistErr) {
+          console.error('[SoilGridsProvider] Failed to persist failure cooldown:', persistErr.message);
         }
-      } catch (persistErr) {
-        console.error('[SoilGridsProvider] Failed to persist failure cooldown:', persistErr.message);
       }
 
       const stale = this.staleSoilMap.get(cellKey);
@@ -502,13 +542,15 @@ class SoilGridsProvider {
         reason: err.name === 'TimeoutError' ? 'timeout' : 'connection_error',
         verifiedAt: null,
         data: null,
-        remainingCooldownSeconds: cooldownSecs,
+        remainingCooldownSeconds: isProbeCancellation ? 0 : cooldownSecs,
         error: err.name === 'TimeoutError' ? 'Provider request timed out' : 'Provider connection failed',
       };
     } finally {
-      if (permit && permit.granted && this.cacheRepo && typeof this.cacheRepo.releaseOutboundPermit === 'function') {
+      clearTimeout(timeoutTimer);
+      if (removeParentSignalListener) removeParentSignalListener();
+      if (!hasParentPermit && permit && permit.granted && this.cacheRepo && typeof this.cacheRepo.releaseOutboundPermit === 'function') {
         try {
-          await this.cacheRepo.releaseOutboundPermit('soilgrids', this.instanceId);
+          await this.cacheRepo.releaseOutboundPermit('soilgrids', activePermitHolder);
         } catch (relErr) {
           console.error('[SoilGridsProvider] Error releasing outbound permit:', relErr.message);
         }

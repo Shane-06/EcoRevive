@@ -152,16 +152,21 @@ class OpenMeteoProvider {
 
   /**
    * Fetches weather information for given coordinates from Open-Meteo.
-   * @param {object} coords
-   * @param {number} coords.latitude - Latitude coordinate
-   * @param {number} coords.longitude - Longitude coordinate
+   * Coordinates outbound requests with atomic PostgreSQL permits and failure cooldown.
+   * Supports bounded deadlines and signal cancellation.
+   * @param {object} params
+   * @param {number} params.latitude - Latitude coordinate
+   * @param {number} params.longitude - Longitude coordinate
+   * @param {number} [params.timeoutMs] - Optional custom timeout in ms
+   * @param {AbortSignal} [params.signal] - Optional external AbortSignal (e.g. deadline)
    * @returns {Promise<object>} Normalized weather section
    */
-  async fetchWeather({ latitude, longitude }) {
+  async fetchWeather({ latitude, longitude, timeoutMs, signal }) {
     await this.ensureInitialized();
 
     const key = this.normalizeCoords(latitude, longitude);
     const now = Date.now();
+    const effectiveTimeoutMs = timeoutMs || this.timeoutMs;
 
     // 1. Prevent outbound calls during active HTTP 429 cooldown (in-memory fast path)
     if (now < this.cooldownUntil) {
@@ -191,7 +196,7 @@ class OpenMeteoProvider {
     if (this.cacheRepo && typeof this.cacheRepo.acquireOutboundPermit === 'function') {
       permit = await this.cacheRepo.acquireOutboundPermit(
         'open-meteo',
-        Math.ceil(this.timeoutMs / 1000) + 2,
+        Math.ceil(effectiveTimeoutMs / 1000) + 2,
         this.instanceId
       );
 
@@ -234,6 +239,29 @@ class OpenMeteoProvider {
       }
     }
 
+    // Combine timeout timer with optional parent AbortSignal
+    const fetchAbortController = new AbortController();
+    const timeoutTimer = setTimeout(() => {
+      const tErr = new Error('The operation was aborted due to timeout');
+      tErr.name = 'TimeoutError';
+      fetchAbortController.abort(tErr);
+    }, effectiveTimeoutMs);
+
+    let removeParentSignalListener = null;
+    if (signal) {
+      if (signal.aborted) {
+        clearTimeout(timeoutTimer);
+        fetchAbortController.abort(signal.reason);
+      } else {
+        const onParentAbort = () => {
+          clearTimeout(timeoutTimer);
+          fetchAbortController.abort(signal.reason);
+        };
+        signal.addEventListener('abort', onParentAbort, { once: true });
+        removeParentSignalListener = () => signal.removeEventListener('abort', onParentAbort);
+      }
+    }
+
     try {
       const url = new URL(this.baseUrl);
       url.searchParams.set('latitude', latitude.toString());
@@ -253,7 +281,7 @@ class OpenMeteoProvider {
           'User-Agent': USER_AGENT,
           'Accept': 'application/json',
         },
-        signal: AbortSignal.timeout(this.timeoutMs),
+        signal: fetchAbortController.signal,
       });
 
       if (!response.ok) {
@@ -373,9 +401,16 @@ class OpenMeteoProvider {
         source: 'Open-Meteo',
         verifiedAt: null,
         data: null,
-        error: err.name === 'TimeoutError' ? 'Provider request timed out' : 'Provider connection failed',
+        error:
+          err.name === 'TimeoutError' || err.name === 'AbortError'
+            ? 'Provider request timed out'
+            : 'Provider connection failed',
       };
     } finally {
+      clearTimeout(timeoutTimer);
+      if (removeParentSignalListener) {
+        removeParentSignalListener();
+      }
       if (permit && permit.granted && permit.permitHolder && typeof this.cacheRepo?.releaseOutboundPermit === 'function') {
         try {
           await this.cacheRepo.releaseOutboundPermit('open-meteo', permit.permitHolder);

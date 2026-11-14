@@ -315,7 +315,9 @@ class EnvironmentCacheRepository {
           permit_expires_at = EXCLUDED.permit_expires_at,
           updated_at = CURRENT_TIMESTAMP
         WHERE provider_cooldowns.cooldown_until <= CURRENT_TIMESTAMP
-          AND (provider_cooldowns.permit_expires_at IS NULL OR provider_cooldowns.permit_expires_at <= CURRENT_TIMESTAMP)
+          AND (provider_cooldowns.permit_expires_at IS NULL 
+               OR provider_cooldowns.permit_expires_at <= CURRENT_TIMESTAMP
+               OR provider_cooldowns.permit_holder = $2)
         RETURNING provider_name, cooldown_until, retry_after_seconds, permit_holder, permit_expires_at;
       `;
 

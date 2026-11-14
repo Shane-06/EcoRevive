@@ -154,9 +154,12 @@ class EnvironmentService {
    * In-flight promise deduplication wraps the entire retrieval to prevent race conditions.
    * @param {number} parsedLat
    * @param {number} parsedLng
+   * @param {object} [options={}]
+   * @param {number} [options.timeoutMs]
+   * @param {AbortSignal} [options.signal]
    * @returns {Promise<object>}
    */
-  async getWeather(parsedLat, parsedLng) {
+  async getWeather(parsedLat, parsedLng, options = {}) {
     const key = this.normalizeWeatherCoords(parsedLat, parsedLng);
     const now = Date.now();
 
@@ -242,7 +245,12 @@ class EnvironmentService {
         }
 
         // Provider is not in cooldown -> dispatch live request
-        const result = await this.openMeteoProvider.fetchWeather({ latitude: parsedLat, longitude: parsedLng });
+        const result = await this.openMeteoProvider.fetchWeather({
+          latitude: parsedLat,
+          longitude: parsedLng,
+          timeoutMs: options.timeoutMs,
+          signal: options.signal,
+        });
 
         if (result && result.status === 'available' && !result.stale) {
           // Commit to L1 cache
@@ -332,7 +340,7 @@ class EnvironmentService {
       data: dbRow.data,
       metadata: {
         ...(dbRow.metadata || {}),
-        spatialPrecision: isNearbyObservation ? 'approximate_grid_bucket' : 'exact_coordinates',
+        spatialPrecision: isNearbyObservation ? 'approximate_grid_bucket' : 'same_query_location',
         isExactRasterCell: false,
         isExactSiteMeasurement: false,
         spatialMethod: 'approximate_wgs84_grid_bucket',
@@ -350,15 +358,58 @@ class EnvironmentService {
   }
 
   /**
+   * Formats a stale L2 database regional soil record as a safe fallback payload.
+   * Preserves sampling direction, distance, and provenance metadata.
+   * @private
+   */
+  _formatStaleRegionalSoil(dbRow, lat, lng, distanceKm, remainingSecs = 0) {
+    const meta = dbRow.metadata || {};
+    const verifiedAtMs = new Date(dbRow.verified_at).getTime();
+    const staleAgeSeconds = Math.max(0, Math.floor((Date.now() - verifiedAtMs) / 1000));
+    const staleAgeDays = Math.round((staleAgeSeconds / 86400) * 10) / 10;
+    const distKm = meta.distanceKm || distanceKm;
+    const direction = meta.direction || 'nearby';
+
+    return {
+      status: 'regional_baseline',
+      isRegional: true,
+      source: dbRow.source || 'ISRIC SoilGrids (Regional Baseline)',
+      samplingMethod: meta.samplingMethod || 'cardinal_radial_probe',
+      sampleLocation: meta.sampleLocation || null,
+      targetLocation: meta.targetLocation || {
+        latitude: Math.round(lat * 10000) / 10000,
+        longitude: Math.round(lng * 10000) / 10000,
+      },
+      distanceKm: distKm,
+      direction: meta.direction || 'Unknown',
+      spatialPrecision: 'regional_baseline',
+      isExactRasterCell: false,
+      isExactSiteMeasurement: false,
+      stale: true,
+      staleAgeSeconds,
+      staleAgeDays,
+      warning: remainingSecs > 0
+        ? `SoilGrids provider in cooldown (${remainingSecs}s remaining). Serving cached regional soil baseline (${distKm} km ${direction} of site, ${staleAgeDays}d ago).`
+        : `Live soil provider unavailable. Serving cached regional soil baseline (${distKm} km ${direction} of site, ${staleAgeDays}d ago).`,
+      verifiedAt: new Date(dbRow.verified_at).toISOString(),
+      data: dbRow.data,
+    };
+  }
+
+  /**
    * Retrieves soil properties using actual SoilGrids 250m raster cell identity.
    * Caches exact-site measurements in L1 and L2 persistent storage (90-day TTL).
    * In-flight promise deduplication wraps the entire retrieval to prevent race conditions.
    * Supports persistent failure cooldown and stale L2 fallback during upstream outages.
    * @param {number} parsedLat
    * @param {number} parsedLng
+   * @param {object} [options={}]
+   * @param {number} [options.timeoutMs]
+   * @param {AbortSignal} [options.signal]
+   * @param {string} [options.parentPermitHolder]
    * @returns {Promise<object>}
    */
-  async getSoil(parsedLat, parsedLng) {
+  async getSoil(parsedLat, parsedLng, options = {}) {
     const { cellKey, snappedLat, snappedLng } = this.computeSoilRasterCell(parsedLat, parsedLng);
     const exactSoilKey = `soil_exact:${cellKey}`;
     const now = Date.now();
@@ -400,7 +451,7 @@ class EnvironmentService {
                   data: dbRow.data,
                   metadata: {
                     ...(dbRow.metadata || {}),
-                    spatialPrecision: isNearbyObservation ? 'approximate_grid_bucket' : 'exact_coordinates',
+                    spatialPrecision: isNearbyObservation ? 'approximate_grid_bucket' : 'same_query_location',
                     isExactRasterCell: false,
                     isExactSiteMeasurement: false,
                     spatialMethod: 'approximate_wgs84_grid_bucket',
@@ -466,7 +517,13 @@ class EnvironmentService {
           console.error('[EnvironmentService] SoilGrids cooldown check error:', cdErr.message);
         }
 
-        const result = await this.soilGridsProvider.fetchSoil({ latitude: parsedLat, longitude: parsedLng });
+        const result = await this.soilGridsProvider.fetchSoil({
+          latitude: parsedLat,
+          longitude: parsedLng,
+          timeoutMs: options.timeoutMs,
+          signal: options.signal,
+          parentPermitHolder: options.parentPermitHolder,
+        });
 
         // Commit to cache ONLY if valid measurements exist (never cache NoData or urban mask as available)
         const hasValidMeasurements =
@@ -480,6 +537,12 @@ class EnvironmentService {
             result.data.organicCarbon !== null);
 
         if (hasValidMeasurements) {
+          // Attach spatial precision to fresh live measurement
+          result.metadata = {
+            ...(result.metadata || {}),
+            spatialPrecision: 'same_query_location',
+          };
+
           // Store in L1 cache
           this._setCache(this.soilCache, exactSoilKey, result, this.SOIL_TTL_MS);
 
@@ -498,7 +561,7 @@ class EnvironmentService {
                   ...(result.metadata || {}),
                   isExactRasterCell: false,
                   isExactSiteMeasurement: false,
-                  spatialPrecision: 'exact_query_coordinates',
+                  spatialPrecision: 'same_query_location',
                   spatialMethod: 'approximate_wgs84_grid_bucket',
                   nominalResolution: '~250m (localized WGS84 approximation)',
                   cellKey,
@@ -559,19 +622,25 @@ class EnvironmentService {
 
   /**
    * Bounded regional sampling strategy when exact site soil data is unavailable (urban mask).
-   * Evaluates up to four cardinal probes (North, East, South, West) at configurable distance.
-   * Uses the first valid response and preserves complete metadata (distance, direction, probe site).
+   * Evaluates up to four cardinal probes (North, East, South, West) at configurable distance (10km).
+   * Runs probes concurrently under a shared regional session permit, short-circuiting on the first
+   * valid observation and immediately canceling in-flight probes to preserve upstream resources.
+   * Preserves complete spatial provenance and supports fresh and stale L1/L2 regional cache fallback.
    * Never stores regional data under the exact-site cache key.
    * @param {number} lat - Target latitude
    * @param {number} lng - Target longitude
+   * @param {object} [options={}]
+   * @param {AbortSignal} [options.signal]
+   * @param {number} [options.remainingDeadlineMs]
    * @returns {Promise<object|null>}
    */
-  async getRegionalSoilBaseline(lat, lng) {
+  async getRegionalSoilBaseline(lat, lng, options = {}) {
     const distanceKm = config.providers.soilGrids.regionalDistanceKm || 10;
     const { cellKey } = this.computeSoilRasterCell(lat, lng);
     const regionalKey = `regional:${Number(lat).toFixed(2)}:${Number(lng).toFixed(2)}`;
     const regionalDbKey = `${cellKey}:d${distanceKm}`;
     const now = Date.now();
+    let dbRegionalStaleCandidate = null;
 
     // 1. Check L1 in-memory regional cache
     const cachedRegional = this.regionalCache.get(regionalKey);
@@ -597,6 +666,9 @@ class EnvironmentService {
               targetLocation: meta.targetLocation || { latitude: lat, longitude: lng },
               distanceKm: meta.distanceKm || distanceKm,
               direction: meta.direction || 'Unknown',
+              spatialPrecision: 'regional_baseline',
+              isExactRasterCell: false,
+              isExactSiteMeasurement: false,
               warning: `Regional soil baseline derived from nearby non-urban profile (${meta.distanceKm || distanceKm} km ${meta.direction || ''} of site). Not an exact-site measurement; urban soil conditions may differ.`,
               verifiedAt: new Date(dbRow.verified_at).toISOString(),
               stale: false,
@@ -604,11 +676,49 @@ class EnvironmentService {
             };
             this._setCache(this.regionalCache, regionalKey, cachedResult, expiresAtMs - now);
             return cachedResult;
+          } else {
+            dbRegionalStaleCandidate = dbRow;
           }
         }
       }
     } catch (dbErr) {
       console.error('[EnvironmentService] L2 regional soil cache lookup error:', dbErr.message);
+    }
+
+    // 3. Check active SoilGrids cooldown before outbound probing
+    try {
+      if (this.cacheRepo && typeof this.cacheRepo.getProviderCooldown === 'function') {
+        const cd = await this.cacheRepo.getProviderCooldown('soilgrids');
+        if (cd && cd.cooldownUntil && cd.cooldownUntil.getTime() > now) {
+          const remainingSecs = Math.max(1, Math.ceil((cd.cooldownUntil.getTime() - now) / 1000));
+          if (dbRegionalStaleCandidate) {
+            return this._formatStaleRegionalSoil(dbRegionalStaleCandidate, lat, lng, distanceKm, remainingSecs);
+          }
+          return null;
+        }
+      }
+    } catch (cdErr) {
+      console.error('[EnvironmentService] Regional probe cooldown check error:', cdErr.message);
+    }
+
+    // 4. Coordinate outbound permit session across parallel probes
+    const sessionPermitHolder = `sg_reg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    let permit = null;
+    if (this.cacheRepo && typeof this.cacheRepo.acquireOutboundPermit === 'function') {
+      permit = await this.cacheRepo.acquireOutboundPermit('soilgrids', 10, sessionPermitHolder);
+      if (permit.inCooldown) {
+        if (dbRegionalStaleCandidate) {
+          return this._formatStaleRegionalSoil(dbRegionalStaleCandidate, lat, lng, distanceKm, permit.retryAfterSeconds);
+        }
+        return null;
+      }
+      if (!permit.granted) {
+        // Another backend instance holds active outbound permit
+        if (dbRegionalStaleCandidate) {
+          return this._formatStaleRegionalSoil(dbRegionalStaleCandidate, lat, lng, distanceKm);
+        }
+        return null;
+      }
     }
 
     const deltaLat = distanceKm / 111.0;
@@ -622,84 +732,146 @@ class EnvironmentService {
       { direction: 'West', lat, lng: lng - deltaLng },
     ];
 
-    for (const probe of probes) {
-      const probeLat = Math.max(-90, Math.min(90, probe.lat));
-      const probeLng = Math.max(-180, Math.min(180, probe.lng));
-
-      try {
-        const probeResult = await this.getSoil(probeLat, probeLng);
-
-        if (
-          probeResult &&
-          probeResult.status === 'available' &&
-          probeResult.data &&
-          (probeResult.data.ph !== null || probeResult.data.clayPercentage !== null)
-        ) {
-          const actualDist = this._calculateDistanceKm(lat, lng, probeLat, probeLng);
-          const baselineResult = {
-            status: 'regional_baseline',
-            isRegional: true,
-            source: 'ISRIC SoilGrids (Regional Baseline)',
-            samplingMethod: 'cardinal_radial_probe',
-            sampleLocation: {
-              latitude: Math.round(probeLat * 10000) / 10000,
-              longitude: Math.round(probeLng * 10000) / 10000,
-            },
-            targetLocation: {
-              latitude: Math.round(lat * 10000) / 10000,
-              longitude: Math.round(lng * 10000) / 10000,
-            },
-            distanceKm: actualDist,
-            direction: probe.direction,
-            warning: `Regional soil baseline derived from nearby non-urban profile (${actualDist} km ${probe.direction} of site). Not an exact-site measurement; urban soil conditions may differ.`,
-            verifiedAt: new Date().toISOString(),
-            stale: false,
-            data: probeResult.data,
-          };
-
-          // Cache in L1 regional cache (NEVER under the exact-site cache key)
-          this._setCache(this.regionalCache, regionalKey, baselineResult, this.SOIL_TTL_MS);
-
-          // Persist to L2 database regional cache
-          try {
-            if (this.cacheRepo && typeof this.cacheRepo.upsertCache === 'function') {
-              await this.cacheRepo.upsertCache({
-                gridKey: regionalDbKey,
-                cacheType: 'soil_regional',
-                latitude: lat,
-                longitude: lng,
-                source: 'ISRIC SoilGrids (Regional Baseline)',
-                status: 'regional_baseline',
-                data: probeResult.data,
-                metadata: {
-                  isRegional: true,
-                  samplingMethod: 'cardinal_radial_probe',
-                  direction: probe.direction,
-                  distanceKm: actualDist,
-                  sampleLocation: baselineResult.sampleLocation,
-                  targetLocation: baselineResult.targetLocation,
-                },
-                verifiedAt: baselineResult.verifiedAt,
-                expiresAt: new Date(Date.now() + this.SOIL_TTL_MS),
-              });
-            }
-          } catch (upsertErr) {
-            console.error('[EnvironmentService] Failed to upsert regional soil to L2 cache:', upsertErr.message);
-          }
-
-          return baselineResult;
-        }
-      } catch {
-        // Continue to next probe on probe failure
+    const probeAbortController = new AbortController();
+    let removeParentSignalListener = null;
+    if (options.signal) {
+      if (options.signal.aborted) {
+        probeAbortController.abort(options.signal.reason);
+      } else {
+        const onParentAbort = () => probeAbortController.abort(options.signal.reason);
+        options.signal.addEventListener('abort', onParentAbort, { once: true });
+        removeParentSignalListener = () => options.signal.removeEventListener('abort', onParentAbort);
       }
     }
 
-    return null;
+    const probeTimeoutMs = options.remainingDeadlineMs
+      ? Math.min(config.providers.soilGrids.probeTimeoutMs || 2000, options.remainingDeadlineMs)
+      : config.providers.soilGrids.probeTimeoutMs || 2000;
+
+    try {
+      // Execute 4 cardinal probes concurrently under the shared session permit
+      const probePromises = probes.map((probe) => {
+        const probeLat = Math.max(-90, Math.min(90, probe.lat));
+        const probeLng = Math.max(-180, Math.min(180, probe.lng));
+        return this.getSoil(probeLat, probeLng, {
+          parentPermitHolder: sessionPermitHolder,
+          signal: probeAbortController.signal,
+          timeoutMs: probeTimeoutMs,
+        })
+          .then((res) => ({ probe, probeLat, probeLng, res }))
+          .catch((err) => ({ probe, probeLat, probeLng, err }));
+      });
+
+      // Short-circuit on the first valid physical measurement and abort in-flight competitors
+      let winningProbe = null;
+      await new Promise((resolve) => {
+        let remaining = probePromises.length;
+        probePromises.forEach((promise) => {
+          promise.then((outcome) => {
+            const { res } = outcome;
+            if (
+              !winningProbe &&
+              res &&
+              res.status === 'available' &&
+              res.data &&
+              (res.data.ph !== null || res.data.clayPercentage !== null)
+            ) {
+              winningProbe = outcome;
+              probeAbortController.abort(); // Cancel remaining in-flight probes
+              resolve();
+            } else {
+              remaining--;
+              if (remaining === 0) {
+                resolve();
+              }
+            }
+          });
+        });
+      });
+
+      if (winningProbe) {
+        const { probe: p, probeLat, probeLng, res } = winningProbe;
+        const actualDist = this._calculateDistanceKm(lat, lng, probeLat, probeLng);
+        const baselineResult = {
+          status: 'regional_baseline',
+          isRegional: true,
+          source: 'ISRIC SoilGrids (Regional Baseline)',
+          samplingMethod: 'cardinal_radial_probe',
+          sampleLocation: {
+            latitude: Math.round(probeLat * 10000) / 10000,
+            longitude: Math.round(probeLng * 10000) / 10000,
+          },
+          targetLocation: {
+            latitude: Math.round(lat * 10000) / 10000,
+            longitude: Math.round(lng * 10000) / 10000,
+          },
+          distanceKm: actualDist,
+          direction: p.direction,
+          spatialPrecision: 'regional_baseline',
+          isExactRasterCell: false,
+          isExactSiteMeasurement: false,
+          warning: `Regional soil baseline derived from nearby non-urban profile (${actualDist} km ${p.direction} of site). Not an exact-site measurement; urban soil conditions may differ.`,
+          verifiedAt: new Date().toISOString(),
+          stale: false,
+          data: res.data,
+        };
+
+        // Cache in L1 regional cache (NEVER under the exact-site cache key)
+        this._setCache(this.regionalCache, regionalKey, baselineResult, this.SOIL_TTL_MS);
+
+        // Persist to L2 database regional cache
+        try {
+          if (this.cacheRepo && typeof this.cacheRepo.upsertCache === 'function') {
+            await this.cacheRepo.upsertCache({
+              gridKey: regionalDbKey,
+              cacheType: 'soil_regional',
+              latitude: lat,
+              longitude: lng,
+              source: 'ISRIC SoilGrids (Regional Baseline)',
+              status: 'regional_baseline',
+              data: res.data,
+              metadata: {
+                isRegional: true,
+                samplingMethod: 'cardinal_radial_probe',
+                direction: p.direction,
+                distanceKm: actualDist,
+                sampleLocation: baselineResult.sampleLocation,
+                targetLocation: baselineResult.targetLocation,
+                spatialPrecision: 'regional_baseline',
+              },
+              verifiedAt: baselineResult.verifiedAt,
+              expiresAt: new Date(Date.now() + this.SOIL_TTL_MS),
+            });
+          }
+        } catch (upsertErr) {
+          console.error('[EnvironmentService] Failed to upsert regional soil to L2 cache:', upsertErr.message);
+        }
+
+        return baselineResult;
+      }
+
+      // If all probes failed / returned urban mask / timed out -> fallback to stale regional if present
+      if (dbRegionalStaleCandidate) {
+        return this._formatStaleRegionalSoil(dbRegionalStaleCandidate, lat, lng, distanceKm);
+      }
+
+      return null;
+    } finally {
+      if (removeParentSignalListener) removeParentSignalListener();
+      if (permit && permit.granted && this.cacheRepo && typeof this.cacheRepo.releaseOutboundPermit === 'function') {
+        try {
+          await this.cacheRepo.releaseOutboundPermit('soilgrids', sessionPermitHolder);
+        } catch (relErr) {
+          console.error('[EnvironmentService] Error releasing regional session permit:', relErr.message);
+        }
+      }
+    }
   }
 
   /**
    * Retrieves environmental conditions for a specific location.
    * Concurrently queries Open-Meteo and ISRIC SoilGrids with deduplication and tiered caching.
+   * Enforces a hard 4,500 ms master deadline on soil resolution to keep the complete API response under 5s.
    * If exact-site soil data is unavailable (urban mask), optionally queries regional baseline.
    * @param {object} params
    * @param {number|string} params.lat - Latitude coordinate
@@ -731,54 +903,83 @@ class EnvironmentService {
       );
     }
 
-    // Execute provider lookups concurrently with deduplication and tiered caching
-    const [weather, exactSoil] = await Promise.all([
-      this.getWeather(parsedLat, parsedLng),
-      this.getSoil(parsedLat, parsedLng),
-    ]);
+    const startTime = Date.now();
+    const TOTAL_SOIL_DEADLINE_MS = config.providers.soilGrids.overallDeadlineMs || 4500;
+    const exactTimeoutMs = config.providers.soilGrids.exactTimeoutMs || 2200;
 
-    let soil = exactSoil;
+    const masterAbortController = new AbortController();
+    const deadlineTimer = setTimeout(() => {
+      const dErr = new Error('SOIL_DEADLINE_EXCEEDED');
+      dErr.name = 'TimeoutError';
+      masterAbortController.abort(dErr);
+    }, TOTAL_SOIL_DEADLINE_MS);
 
-    // Optional regional baseline fallback when exact-site soil is unavailable (urban mask)
-    if (
-      soil &&
-      soil.status === 'unavailable' &&
-      soil.reason === 'urban_mask' &&
-      config.providers.soilGrids.enableRegionalBaseline !== false &&
-      enableRegionalBaseline !== false
-    ) {
-      const regional = await this.getRegionalSoilBaseline(parsedLat, parsedLng);
-      if (regional) {
-        soil = regional;
+    try {
+      // Execute provider lookups concurrently with deduplication and tiered caching
+      const [weather, exactSoil] = await Promise.all([
+        this.getWeather(parsedLat, parsedLng, {
+          signal: masterAbortController.signal,
+          timeoutMs: exactTimeoutMs,
+        }),
+        this.getSoil(parsedLat, parsedLng, {
+          signal: masterAbortController.signal,
+          timeoutMs: exactTimeoutMs,
+        }),
+      ]);
+
+      let soil = exactSoil;
+
+      // Optional regional baseline fallback ONLY when exact-site soil is unavailable due to urban_mask
+      if (
+        soil &&
+        soil.status === 'unavailable' &&
+        soil.reason === 'urban_mask' &&
+        config.providers.soilGrids.enableRegionalBaseline !== false &&
+        enableRegionalBaseline !== false &&
+        !masterAbortController.signal.aborted
+      ) {
+        const elapsed = Date.now() - startTime;
+        const remainingDeadlineMs = Math.max(500, TOTAL_SOIL_DEADLINE_MS - elapsed);
+
+        const regional = await this.getRegionalSoilBaseline(parsedLat, parsedLng, {
+          signal: masterAbortController.signal,
+          remainingDeadlineMs,
+        });
+
+        if (regional) {
+          soil = regional;
+        }
       }
-    }
 
-    return {
-      location: {
-        latitude: parsedLat,
-        longitude: parsedLng,
-      },
-      weather,
-      soil,
-      terrain: {
-        status: 'unavailable',
-        source: null,
-        verifiedAt: null,
-        data: null,
-      },
-      land: {
-        status: 'unavailable',
-        source: null,
-        verifiedAt: null,
-        data: null,
-      },
-      water: {
-        status: 'unavailable',
-        source: null,
-        verifiedAt: null,
-        data: null,
-      },
-    };
+      return {
+        location: {
+          latitude: parsedLat,
+          longitude: parsedLng,
+        },
+        weather,
+        soil,
+        terrain: {
+          status: 'unavailable',
+          source: null,
+          verifiedAt: null,
+          data: null,
+        },
+        land: {
+          status: 'unavailable',
+          source: null,
+          verifiedAt: null,
+          data: null,
+        },
+        water: {
+          status: 'unavailable',
+          source: null,
+          verifiedAt: null,
+          data: null,
+        },
+      };
+    } finally {
+      clearTimeout(deadlineTimer);
+    }
   }
 }
 

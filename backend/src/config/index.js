@@ -126,6 +126,9 @@ const config = {
       ttlMs: parseInt(process.env.SOIL_TTL_MS || (90 * 24 * 60 * 60 * 1000).toString(), 10), // 90 days
       enableRegionalBaseline: process.env.SOILGRIDS_ENABLE_REGIONAL_BASELINE !== 'false',
       regionalDistanceKm: parseFloat(process.env.SOILGRIDS_REGIONAL_DISTANCE_KM || '10'),
+      overallDeadlineMs: parseInt(process.env.SOILGRIDS_OVERALL_DEADLINE_MS || '4500', 10), // 4.5s overall deadline
+      exactTimeoutMs: parseInt(process.env.SOILGRIDS_EXACT_TIMEOUT_MS || '2200', 10), // 2.2s exact-site query budget
+      probeTimeoutMs: parseInt(process.env.SOILGRIDS_PROBE_TIMEOUT_MS || '2000', 10), // 2.0s per-probe budget
     },
   },
   ai: {
