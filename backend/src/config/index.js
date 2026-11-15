@@ -129,19 +129,19 @@ const config = {
   providers: {
     openMeteo: {
       baseUrl: process.env.OPEN_METEO_BASE_URL || 'https://api.open-meteo.com/v1/forecast',
-      timeoutMs: parseInt(process.env.PROVIDER_TIMEOUT_MS || '5000', 10),
+      timeoutMs: parseInt(process.env.PROVIDER_TIMEOUT_MS || '4500', 10),
       freshTtlMs: parseInt(process.env.WEATHER_FRESH_TTL_MS || (30 * 60 * 1000).toString(), 10), // 30 mins
       maxStaleMs: parseInt(process.env.WEATHER_MAX_STALE_MS || (24 * 60 * 60 * 1000).toString(), 10), // 24 hours
     },
     soilGrids: {
       baseUrl: process.env.SOILGRIDS_BASE_URL || 'https://rest.isric.org/soilgrids/v2.0/properties/query',
       timeoutMs: parseInt(process.env.SOILGRIDS_TIMEOUT_MS || '8000', 10), // 8s bounded default (reduced from 25s)
-      failureCooldownSeconds: parseInt(process.env.SOILGRIDS_COOLDOWN_SECONDS || '60', 10), // 60s failure cooldown
+      failureCooldownSeconds: parseInt(process.env.SOILGRIDS_COOLDOWN_SECONDS || '10', 10), // transient outage backoff; 429 uses Retry-After
       ttlMs: parseInt(process.env.SOIL_TTL_MS || (90 * 24 * 60 * 60 * 1000).toString(), 10), // 90 days
       enableRegionalBaseline: process.env.SOILGRIDS_ENABLE_REGIONAL_BASELINE !== 'false',
       regionalDistanceKm: parseFloat(process.env.SOILGRIDS_REGIONAL_DISTANCE_KM || '10'),
       overallDeadlineMs: parseInt(process.env.SOILGRIDS_OVERALL_DEADLINE_MS || '4500', 10), // 4.5s overall deadline
-      exactTimeoutMs: parseInt(process.env.SOILGRIDS_EXACT_TIMEOUT_MS || '2200', 10), // 2.2s exact-site query budget
+      exactTimeoutMs: parseInt(process.env.SOILGRIDS_EXACT_TIMEOUT_MS || '4200', 10), // allow normal multi-raster latency
       probeTimeoutMs: parseInt(process.env.SOILGRIDS_PROBE_TIMEOUT_MS || '2000', 10), // 2.0s per-probe budget
     },
   },

@@ -121,6 +121,44 @@ describe('Frontend Foundation — API Client Tests', () => {
     }
   });
 
+  it.each([200, 404, 502, 503])('rejects hosting HTML with HTTP %s without displaying the document', async (status) => {
+    const html = '<!DOCTYPE html><html><body>Hosting error page</body></html>';
+    const readBody = vi.fn().mockResolvedValue(html);
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: status === 200,
+      status,
+      headers: new Headers({ 'content-type': 'text/html; charset=utf-8' }),
+      text: readBody,
+    });
+
+    const error = await apiClient.get('/environment?lat=30&lng=76').catch((err) => err);
+    expect(error).toBeInstanceOf(ApiClientError);
+    expect(error.statusCode).toBe(status);
+    expect(error.code).toBe(status >= 500 ? 'SERVICE_UNAVAILABLE' : 'INVALID_API_RESPONSE');
+    expect(error.message).not.toContain('<');
+    expect(error.details.url).toContain('/environment?lat=30&lng=76');
+    expect(readBody).not.toHaveBeenCalled();
+  });
+
+  it('reports malformed JSON as an invalid response rather than a network failure', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => { throw new SyntaxError('Unexpected token <'); },
+    });
+
+    await expect(apiClient.get('/environment')).rejects.toMatchObject({
+      statusCode: 200,
+      code: 'INVALID_API_RESPONSE',
+    });
+  });
+
+  it('accepts an empty HTTP 204 response', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ status: 204 });
+    await expect(apiClient.delete('/resource')).resolves.toBeNull();
+  });
+
   describe('getBaseUrl Path & Environment Resolution', () => {
     const originalEnv = { ...import.meta.env };
 

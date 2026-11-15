@@ -11,8 +11,8 @@ class EnvironmentController {
    */
   async getEnvironment(req, res, next) {
     try {
-      const { lat, lng } = req.query;
-      const result = await environmentService.getLocationEnvironment({ lat, lng });
+      const { lat, lng, section } = req.query;
+      const result = await environmentService.getLocationEnvironment({ lat, lng, section });
 
       return sendSuccess(res, result, 200);
     } catch (err) {

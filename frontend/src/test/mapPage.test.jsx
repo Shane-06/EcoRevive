@@ -187,7 +187,7 @@ describe('Milestone 14 — MapPage End-to-End Integration Tests', () => {
     fireEvent.click(assessBtn);
 
     await waitFor(() => {
-      expect(environmentService.getEnvironment).toHaveBeenCalledWith({ lat: 28.61, lng: 77.2 });
+      expect(environmentService.getEnvironment).toHaveBeenCalledWith({ lat: 28.61, lng: 77.2 }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
       expect(suitabilityService.assessSuitability).toHaveBeenCalledWith({
         lat: 28.61,
         lng: 77.2,

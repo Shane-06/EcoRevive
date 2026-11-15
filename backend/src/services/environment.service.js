@@ -15,10 +15,13 @@ class EnvironmentService {
     this.cacheRepo = deps.cacheRepo || defaultCacheRepo;
 
     this.weatherCache = new Map(); // key -> { data, expiresAt, lastAccessed }
+    this.weatherFailures = new Map();
     this.soilCache = new Map(); // key -> { data, expiresAt, lastAccessed }
     this.regionalCache = new Map(); // key -> { data, expiresAt, lastAccessed }
     this.pendingWeather = new Map(); // key -> Promise<weather>
     this.pendingSoil = new Map(); // key -> Promise<soil>
+    this.pendingRegional = new Map();
+    this.soilFailures = new Map(); // short negative cache, never represented as measurements
 
     this.WEATHER_FRESH_TTL_MS = config.providers.openMeteo.freshTtlMs || 30 * 60 * 1000; // 30 minutes
     this.WEATHER_MAX_STALE_MS = config.providers.openMeteo.maxStaleMs || 24 * 60 * 60 * 1000; // 24 hours
@@ -81,10 +84,13 @@ class EnvironmentService {
    */
   clearCache() {
     this.weatherCache.clear();
+    this.weatherFailures.clear();
     this.soilCache.clear();
     this.regionalCache.clear();
     this.pendingWeather.clear();
     this.pendingSoil.clear();
+    this.pendingRegional.clear();
+    this.soilFailures.clear();
   }
 
   /**
@@ -174,6 +180,8 @@ class EnvironmentService {
     if (this.pendingWeather.has(key)) {
       return this.pendingWeather.get(key);
     }
+    const recentFailure = this.weatherFailures.get(key);
+    if (recentFailure && now < recentFailure.expiresAt) return recentFailure.data;
 
     const fetchPromise = (async () => {
       try {
@@ -194,6 +202,7 @@ class EnvironmentService {
                   verifiedAt: new Date(dbRow.verified_at).toISOString(),
                   stale: false,
                   data: dbRow.data,
+                  metadata: dbRow.metadata || {},
                 };
                 this._setCache(this.weatherCache, key, freshResult, expiresAtMs - now);
                 return freshResult;
@@ -230,6 +239,7 @@ class EnvironmentService {
               staleAgeHours,
               warning: `Open-Meteo rate limit active (HTTP 429). Serving cached weather from ${new Date(dbStaleCandidate.verified_at).toLocaleTimeString()} (${staleAgeHours}h ago).`,
               data: dbStaleCandidate.data,
+              metadata: dbStaleCandidate.metadata || {},
             };
           }
 
@@ -267,6 +277,7 @@ class EnvironmentService {
                 source: result.source || 'Open-Meteo',
                 status: 'available',
                 data: result.data,
+                metadata: result.metadata || {},
                 verifiedAt: result.verifiedAt || new Date().toISOString(),
                 expiresAt: new Date(Date.now() + this.WEATHER_FRESH_TTL_MS),
               });
@@ -291,9 +302,11 @@ class EnvironmentService {
             staleAgeHours,
             warning: `Live weather provider unavailable. Serving cached weather from ${new Date(dbStaleCandidate.verified_at).toLocaleTimeString()} (${staleAgeHours}h ago).`,
             data: dbStaleCandidate.data,
+            metadata: dbStaleCandidate.metadata || {},
           };
         }
 
+        if (result?.status === 'unavailable') this._setCache(this.weatherFailures, key, result, 10000);
         return result;
       } finally {
         this.pendingWeather.delete(key);
@@ -305,7 +318,7 @@ class EnvironmentService {
   }
 
   /**
-   * Retrieves soil properties using actual SoilGrids 250m raster cell identity.
+   * Retrieves soil properties using nominal ~250m geographic cache buckets.
    * Caches exact-site measurements in L1 and L2 persistent storage (90-day TTL).
    * In-flight promise deduplication wraps the entire retrieval to prevent race conditions.
    * @param {number} parsedLat
@@ -418,13 +431,16 @@ class EnvironmentService {
     const cached = this.soilCache.get(exactSoilKey);
     if (cached && now < cached.expiresAt) {
       cached.lastAccessed = now;
-      return JSON.parse(JSON.stringify(cached.data));
+      return this._soilForTarget(JSON.parse(JSON.stringify(cached.data)), parsedLat, parsedLng);
     }
 
     // 2. Deduplication: in-flight request coalescing
     if (this.pendingSoil.has(exactSoilKey)) {
-      return this.pendingSoil.get(exactSoilKey);
+      return this._soilForTarget(await this.pendingSoil.get(exactSoilKey), parsedLat, parsedLng);
     }
+
+    const failure = this.soilFailures.get(exactSoilKey);
+    if (failure && now < failure.expiresAt) return failure.data;
 
     const fetchPromise = (async () => {
       try {
@@ -529,14 +545,9 @@ class EnvironmentService {
         const hasValidMeasurements =
           result &&
           result.status === 'available' &&
-          result.data &&
-          (result.data.ph !== null ||
-            result.data.clayPercentage !== null ||
-            result.data.sandPercentage !== null ||
-            result.data.siltPercentage !== null ||
-            result.data.organicCarbon !== null);
+          defaultCacheRepo.isValidSoilMeasurements(result.data);
 
-        if (hasValidMeasurements) {
+        if (hasValidMeasurements && !result.stale) {
           // Attach spatial precision to fresh live measurement
           result.metadata = {
             ...(result.metadata || {}),
@@ -592,6 +603,9 @@ class EnvironmentService {
           );
         }
 
+        if (result?.status === 'unavailable') {
+          this._setCache(this.soilFailures, exactSoilKey, result, result.reason === 'urban_mask' ? 3600000 : 10000);
+        }
         return result;
       } finally {
         this.pendingSoil.delete(exactSoilKey);
@@ -617,7 +631,49 @@ class EnvironmentService {
         Math.sin(dLon / 2) *
         Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return Math.round(R * c * 10) / 10;
+    return R * c;
+  }
+
+  _soilForTarget(result, lat, lng) {
+    if (!result?.data) return result;
+    const copy = JSON.parse(JSON.stringify(result));
+    const source = copy.metadata?.sourceLocation || copy.metadata?.targetLocation;
+    if (source) {
+      const distance = Math.round(this._calculateDistanceKm(lat, lng, source.latitude, source.longitude) * 1000);
+      copy.metadata = {
+        ...copy.metadata, sourceLocation: source, targetLocation: { latitude: lat, longitude: lng },
+        distanceFromObservedMeters: distance,
+        spatialPrecision: distance > 15 ? 'approximate_grid_bucket' : 'same_query_location',
+        isExactSiteMeasurement: false,
+      };
+      if (distance > 15) copy.warning = `Cached modeled soil profile approximately ${distance}m from this point; not an exact-site measurement.`;
+    }
+    return copy;
+  }
+
+  _regionalForTarget(result, lat, lng) {
+    if (!result) return result;
+    const copy = JSON.parse(JSON.stringify(result));
+    copy.targetLocation = { latitude: lat, longitude: lng };
+    if (copy.sampleLocation) {
+      const sample = copy.sampleLocation;
+      copy.distanceKm = Math.round(this._calculateDistanceKm(lat, lng, sample.latitude, sample.longitude) * 10) / 10;
+      const north = sample.latitude - lat;
+      const east = (sample.longitude - lng) * Math.cos(lat * Math.PI / 180);
+      copy.direction = Math.abs(north) >= Math.abs(east) ? (north >= 0 ? 'North' : 'South') : (east >= 0 ? 'East' : 'West');
+      copy.warning = `${copy.stale ? 'Cached' : 'Regional'} soil baseline (${copy.distanceKm} km ${copy.direction} of site). Not an exact-site measurement; urban soil conditions may differ.`;
+    }
+    return copy;
+  }
+
+  async getRegionalSoilBaseline(lat, lng, options = {}) {
+    const key = this.computeSoilRasterCell(lat, lng).cellKey;
+    // Cache-only fallbacks must never join a session that launches new probes.
+    if (options.cacheOnly) return this._getRegionalSoilBaseline(lat, lng, options);
+    if (this.pendingRegional.has(key)) return this._regionalForTarget(await this.pendingRegional.get(key), lat, lng);
+    const pending = this._getRegionalSoilBaseline(lat, lng, options);
+    this.pendingRegional.set(key, pending);
+    try { return await pending; } finally { this.pendingRegional.delete(key); }
   }
 
   /**
@@ -634,10 +690,10 @@ class EnvironmentService {
    * @param {number} [options.remainingDeadlineMs]
    * @returns {Promise<object|null>}
    */
-  async getRegionalSoilBaseline(lat, lng, options = {}) {
+  async _getRegionalSoilBaseline(lat, lng, options = {}) {
     const distanceKm = config.providers.soilGrids.regionalDistanceKm || 10;
     const { cellKey } = this.computeSoilRasterCell(lat, lng);
-    const regionalKey = `regional:${Number(lat).toFixed(2)}:${Number(lng).toFixed(2)}`;
+    const regionalKey = `regional:${cellKey}`;
     const regionalDbKey = `${cellKey}:d${distanceKm}`;
     const now = Date.now();
     let dbRegionalStaleCandidate = null;
@@ -646,7 +702,7 @@ class EnvironmentService {
     const cachedRegional = this.regionalCache.get(regionalKey);
     if (cachedRegional && now < cachedRegional.expiresAt) {
       cachedRegional.lastAccessed = now;
-      return JSON.parse(JSON.stringify(cachedRegional.data));
+      return this._regionalForTarget(cachedRegional.data, lat, lng);
     }
 
     // 2. Check L2 persistent database regional cache
@@ -675,7 +731,7 @@ class EnvironmentService {
               data: dbRow.data,
             };
             this._setCache(this.regionalCache, regionalKey, cachedResult, expiresAtMs - now);
-            return cachedResult;
+            return this._regionalForTarget(cachedResult, lat, lng);
           } else {
             dbRegionalStaleCandidate = dbRow;
           }
@@ -683,6 +739,12 @@ class EnvironmentService {
       }
     } catch (dbErr) {
       console.error('[EnvironmentService] L2 regional soil cache lookup error:', dbErr.message);
+    }
+
+    if (options.cacheOnly) {
+      return dbRegionalStaleCandidate
+        ? this._regionalForTarget(this._formatStaleRegionalSoil(dbRegionalStaleCandidate, lat, lng, distanceKm), lat, lng)
+        : null;
     }
 
     // 3. Check active SoilGrids cooldown before outbound probing
@@ -773,8 +835,7 @@ class EnvironmentService {
               !winningProbe &&
               res &&
               res.status === 'available' &&
-              res.data &&
-              (res.data.ph !== null || res.data.clayPercentage !== null)
+              defaultCacheRepo.isValidSoilMeasurements(res.data)
             ) {
               winningProbe = outcome;
               probeAbortController.abort(); // Cancel remaining in-flight probes
@@ -791,15 +852,16 @@ class EnvironmentService {
 
       if (winningProbe) {
         const { probe: p, probeLat, probeLng, res } = winningProbe;
-        const actualDist = this._calculateDistanceKm(lat, lng, probeLat, probeLng);
+        const sample = res.metadata?.sourceLocation || res.metadata?.targetLocation || { latitude: probeLat, longitude: probeLng };
+        const actualDist = Math.round(this._calculateDistanceKm(lat, lng, sample.latitude, sample.longitude) * 10) / 10;
         const baselineResult = {
           status: 'regional_baseline',
           isRegional: true,
           source: 'ISRIC SoilGrids (Regional Baseline)',
           samplingMethod: 'cardinal_radial_probe',
           sampleLocation: {
-            latitude: Math.round(probeLat * 10000) / 10000,
-            longitude: Math.round(probeLng * 10000) / 10000,
+            latitude: sample.latitude,
+            longitude: sample.longitude,
           },
           targetLocation: {
             latitude: Math.round(lat * 10000) / 10000,
@@ -811,17 +873,17 @@ class EnvironmentService {
           isExactRasterCell: false,
           isExactSiteMeasurement: false,
           warning: `Regional soil baseline derived from nearby non-urban profile (${actualDist} km ${p.direction} of site). Not an exact-site measurement; urban soil conditions may differ.`,
-          verifiedAt: new Date().toISOString(),
-          stale: false,
+          verifiedAt: res.verifiedAt || new Date().toISOString(),
+          stale: Boolean(res.stale),
           data: res.data,
         };
 
         // Cache in L1 regional cache (NEVER under the exact-site cache key)
-        this._setCache(this.regionalCache, regionalKey, baselineResult, this.SOIL_TTL_MS);
+        if (!res.stale) this._setCache(this.regionalCache, regionalKey, baselineResult, this.SOIL_TTL_MS);
 
         // Persist to L2 database regional cache
         try {
-          if (this.cacheRepo && typeof this.cacheRepo.upsertCache === 'function') {
+          if (!res.stale && this.cacheRepo && typeof this.cacheRepo.upsertCache === 'function') {
             await this.cacheRepo.upsertCache({
               gridKey: regionalDbKey,
               cacheType: 'soil_regional',
@@ -871,7 +933,7 @@ class EnvironmentService {
   /**
    * Retrieves environmental conditions for a specific location.
    * Concurrently queries Open-Meteo and ISRIC SoilGrids with deduplication and tiered caching.
-   * Enforces a hard 4,500 ms master deadline on soil resolution to keep the complete API response under 5s.
+   * Bounds weather and soil independently; section queries let the UI show each as it completes.
    * If exact-site soil data is unavailable (urban mask), optionally queries regional baseline.
    * @param {object} params
    * @param {number|string} params.lat - Latitude coordinate
@@ -879,7 +941,10 @@ class EnvironmentService {
    * @param {boolean} [params.enableRegionalBaseline=true] - Whether to attempt regional probe on urban NoData
    * @returns {Promise<object>} Normalized environmental assessment data
    */
-  async getLocationEnvironment({ lat, lng, enableRegionalBaseline = true }) {
+  async getLocationEnvironment({ lat, lng, enableRegionalBaseline = true, section }) {
+    if (section && !['weather', 'soil'].includes(section)) {
+      throw new BadRequestError('Section must be weather or soil', 'INVALID_SECTION');
+    }
     if (lat === undefined || lat === null || lat === '') {
       throw new BadRequestError('Latitude (lat) is required', 'MISSING_COORDINATES');
     }
@@ -903,61 +968,73 @@ class EnvironmentService {
       );
     }
 
-    const startTime = Date.now();
-    const TOTAL_SOIL_DEADLINE_MS = config.providers.soilGrids.overallDeadlineMs || 4500;
-    const exactTimeoutMs = config.providers.soilGrids.exactTimeoutMs || 2200;
+    const bounded = async (name, work, budget) => {
+      const controller = new AbortController();
+      let timer;
+      const unavailable = {
+        status: 'unavailable', source: name === 'weather' ? 'Open-Meteo' : 'ISRIC SoilGrids',
+        verifiedAt: null, data: null, reason: 'timeout', error: `${name} assessment deadline exceeded`,
+      };
+      try {
+        return await Promise.race([
+          Promise.resolve().then(() => work(controller.signal)).catch(() => ({ ...unavailable, reason: 'provider_error' })),
+          new Promise((resolve) => {
+            timer = setTimeout(() => {
+              const error = new Error('ASSESSMENT_DEADLINE_EXCEEDED');
+              error.name = 'TimeoutError';
+              controller.abort(error);
+              resolve(unavailable);
+            }, budget);
+          }),
+        ]);
+      } finally { clearTimeout(timer); }
+    };
 
-    const masterAbortController = new AbortController();
-    const deadlineTimer = setTimeout(() => {
-      const dErr = new Error('SOIL_DEADLINE_EXCEEDED');
-      dErr.name = 'TimeoutError';
-      masterAbortController.abort(dErr);
-    }, TOTAL_SOIL_DEADLINE_MS);
-
-    try {
-      // Execute provider lookups concurrently with deduplication and tiered caching
-      const [weather, exactSoil] = await Promise.all([
-        this.getWeather(parsedLat, parsedLng, {
-          signal: masterAbortController.signal,
-          timeoutMs: exactTimeoutMs,
-        }),
-        this.getSoil(parsedLat, parsedLng, {
-          signal: masterAbortController.signal,
-          timeoutMs: exactTimeoutMs,
-        }),
-      ]);
-
-      let soil = exactSoil;
-
-      // Optional regional baseline fallback ONLY when exact-site soil is unavailable due to urban_mask
-      if (
-        soil &&
-        soil.status === 'unavailable' &&
-        soil.reason === 'urban_mask' &&
-        config.providers.soilGrids.enableRegionalBaseline !== false &&
-        enableRegionalBaseline !== false &&
-        !masterAbortController.signal.aborted
-      ) {
-        const elapsed = Date.now() - startTime;
-        const remainingDeadlineMs = Math.max(500, TOTAL_SOIL_DEADLINE_MS - elapsed);
-
-        const regional = await this.getRegionalSoilBaseline(parsedLat, parsedLng, {
-          signal: masterAbortController.signal,
-          remainingDeadlineMs,
-        });
-
-        if (regional) {
-          soil = regional;
-        }
+    const soilBudget = config.providers.soilGrids.overallDeadlineMs || 4500;
+    const weatherBudget = Math.min(config.providers.openMeteo.timeoutMs, 4500);
+    const resolveSoil = async (signal) => {
+      const started = Date.now();
+      // Reuse a valid regional profile immediately when we already know this bucket
+      // is masked or recently failed. Never launch probes on a timeout/error.
+      const key = `soil_exact:${this.computeSoilRasterCell(parsedLat, parsedLng).cellKey}`;
+      const priorFailure = this.soilFailures.get(key);
+      const regionalEnabled = enableRegionalBaseline !== false && config.providers.soilGrids.enableRegionalBaseline !== false;
+      const cachedRegionalPromise = regionalEnabled
+        ? this.getRegionalSoilBaseline(parsedLat, parsedLng, { cacheOnly: true })
+        : Promise.resolve(null);
+      if (regionalEnabled && priorFailure && Date.now() < priorFailure.expiresAt) {
+        const cached = await cachedRegionalPromise;
+        if (cached) return cached;
       }
+      const exact = await this.getSoil(parsedLat, parsedLng, {
+        signal, timeoutMs: config.providers.soilGrids.exactTimeoutMs || 4200,
+      });
+      if (exact?.status === 'available' || !regionalEnabled) return exact;
+      const cachedRegional = await cachedRegionalPromise;
+      if (cachedRegional) return cachedRegional;
+      if (exact?.reason !== 'urban_mask' || signal.aborted) return exact;
+      const remainingDeadlineMs = soilBudget - (Date.now() - started);
+      const regional = await this.getRegionalSoilBaseline(parsedLat, parsedLng, {
+        signal, remainingDeadlineMs: Math.max(1, remainingDeadlineMs),
+        cacheOnly: exact?.reason !== 'urban_mask' || signal.aborted || remainingDeadlineMs <= 0,
+      });
+      return regional || exact;
+    };
+
+    const [weather, soil] = await Promise.all([
+      section === 'soil' ? undefined : bounded('weather', (signal) => this.getWeather(parsedLat, parsedLng, {
+        signal, timeoutMs: weatherBudget,
+      }), weatherBudget),
+      section === 'weather' ? undefined : bounded('soil', resolveSoil, soilBudget),
+    ]);
 
       return {
         location: {
           latitude: parsedLat,
           longitude: parsedLng,
         },
-        weather,
-        soil,
+        ...(weather ? { weather } : {}),
+        ...(soil ? { soil } : {}),
         terrain: {
           status: 'unavailable',
           source: null,
@@ -977,9 +1054,6 @@ class EnvironmentService {
           data: null,
         },
       };
-    } finally {
-      clearTimeout(deadlineTimer);
-    }
   }
 }
 

@@ -88,13 +88,35 @@ class ApiClient {
     try {
       const response = await fetch(url, config);
 
-      let data = null;
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
+      if (response.status === 204) {
+        return null;
+      }
+
+      // Hosting error pages and SPA rewrites can return HTML, even with HTTP 200.
+      // Never expose that document as an error message or accept it as API data.
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.toLowerCase().includes('application/json')) {
+        const unavailable = response.status >= 500;
+        throw new ApiClientError(
+          unavailable
+            ? 'The API service is temporarily unavailable. Please try again shortly.'
+            : 'The server returned a web page instead of API data. Check the frontend API URL and deployment routing.',
+          response.status,
+          unavailable ? 'SERVICE_UNAVAILABLE' : 'INVALID_API_RESPONSE',
+          { url, contentType }
+        );
+      }
+
+      let data;
+      try {
         data = await response.json();
-      } else {
-        const text = await response.text();
-        data = text ? { message: text } : {};
+      } catch {
+        throw new ApiClientError(
+          'The server returned an invalid API response. Please try again shortly.',
+          response.status,
+          'INVALID_API_RESPONSE',
+          { url, contentType }
+        );
       }
 
       if (!response.ok) {

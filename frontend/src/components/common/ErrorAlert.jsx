@@ -23,7 +23,7 @@ export default function ErrorAlert({
       className="p-4 rounded-xl bg-[#fdf2f2] border border-[#f5c6c6] text-[#7a1f1f] flex items-start gap-3 my-3 shadow-subtle"
     >
       <AlertCircle className="w-5 h-5 text-[#b91c1c] shrink-0 mt-0.5" />
-      <div className="flex-1 text-xs sm:text-sm">
+      <div className="min-w-0 flex-1 text-xs sm:text-sm [overflow-wrap:anywhere]">
         {title && <h4 className="font-semibold text-[#991b1b] mb-0.5">{title}</h4>}
         <p className="text-[#7f1d1d] leading-relaxed">{message}</p>
 

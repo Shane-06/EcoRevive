@@ -54,6 +54,7 @@ export default function MapView({
   selectedLocation = null,
   selectedTree = null,
   onSelectLocation,
+  onHoverLocation,
   onSelectTree,
   onViewportChange,
   center = [30.65, 76.78],
@@ -64,6 +65,8 @@ export default function MapView({
   const treeLayerRef = useRef(null);
   const selectedPinLayerRef = useRef(null);
   const isInternalMoveRef = useRef(false);
+  const handlersRef = useRef({});
+  handlersRef.current = { onSelectLocation, onHoverLocation, onViewportChange };
 
   // Initialize Leaflet Map
   useEffect(() => {
@@ -93,16 +96,22 @@ export default function MapView({
     map.on('click', (e) => {
       const lat = parseFloat(e.latlng.lat.toFixed(6));
       const lng = parseFloat(e.latlng.lng.toFixed(6));
-      if (onSelectLocation) {
-        onSelectLocation({ lat, lng });
-      }
+      handlersRef.current.onSelectLocation?.({ lat, lng });
     });
+
+    let dragging = false;
+    map.on('dragstart', () => { dragging = true; handlersRef.current.onHoverLocation?.(null); });
+    map.on('dragend', () => { dragging = false; });
+    map.on('mousemove', (e) => {
+      if (!dragging) handlersRef.current.onHoverLocation?.({ lat: e.latlng.lat, lng: e.latlng.lng });
+    });
+    map.on('mouseout', () => handlersRef.current.onHoverLocation?.(null));
 
     // Handle Viewport Changes (Pan / Zoom)
     const handleViewportChange = () => {
-      if (!onViewportChange || isInternalMoveRef.current) return;
+      if (!handlersRef.current.onViewportChange || isInternalMoveRef.current) return;
       const bounds = map.getBounds();
-      onViewportChange({
+      handlersRef.current.onViewportChange({
         minLat: parseFloat(bounds.getSouth().toFixed(6)),
         minLng: parseFloat(bounds.getWest().toFixed(6)),
         maxLat: parseFloat(bounds.getNorth().toFixed(6)),

@@ -11,7 +11,7 @@ export default function EnvironmentPanel({
   error = null,
   onRefresh,
 }) {
-  if (loading) {
+  if (loading && !environment) {
     return (
       <div className="p-8 rounded-2xl bg-white border border-warm-400 flex flex-col items-center justify-center min-h-[300px] shadow-card">
         <LoadingSpinner size="lg" message="Fetching normalized environmental metrics..." />
@@ -39,7 +39,7 @@ export default function EnvironmentPanel({
         </div>
         <h3 className="font-serif font-bold text-charcoal-900 text-base">No Location Selected</h3>
         <p className="text-xs text-charcoal-600 max-w-xs mx-auto leading-relaxed">
-          Click anywhere on the map or choose a verified tree marker to inspect real-time weather and soil metrics.
+          Hover over the map, click a location or choose a verified tree marker to inspect weather and soil metrics.
         </p>
       </div>
     );
@@ -95,6 +95,8 @@ export default function EnvironmentPanel({
                 Available ({weather.source || 'Open-Meteo'})
               </span>
             )
+          ) : weather?.status === 'loading' ? (
+            <span className="text-xs text-charcoal-600" role="status">Loading weather...</span>
           ) : (
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-warm-200 border border-warm-400 text-charcoal-700 text-[10px] font-semibold uppercase tracking-wider">
               <AlertCircle className="w-3 h-3 text-charcoal-500" />
@@ -103,8 +105,9 @@ export default function EnvironmentPanel({
           )}
         </div>
 
-        {weather?.status === 'available' && weather.data ? (
+        {weather?.status === 'loading' ? <LoadingSpinner size="sm" message="Loading weather..." /> : weather?.status === 'available' && weather.data ? (
           <div className="space-y-3">
+            {weather.verifiedAt && <p className="text-xs text-charcoal-500">{weather.stale ? 'Cached' : 'Retrieved'}: {new Date(weather.verifiedAt).toLocaleString()}</p>}
             {weather.warning && (
               <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
                 <Clock className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
@@ -181,11 +184,12 @@ export default function EnvironmentPanel({
       {/* Soil Properties Section */}
       <div className="p-5 rounded-2xl bg-white border border-warm-400 space-y-3.5 shadow-card">
         {(() => {
+          const isSoilLoading = soil?.status === 'loading';
           const isExactAvailable =
             soil?.status === 'available' &&
             !soil?.isRegional &&
             soil?.data &&
-            (soil.data.ph !== null || soil.data.clayPercentage !== null || soil.data.sandPercentage !== null);
+            [soil.data.ph, soil.data.clayPercentage, soil.data.sandPercentage, soil.data.siltPercentage, soil.data.organicCarbon].some(Number.isFinite);
           const isRegional = Boolean(
             (soil?.status === 'regional_baseline' || soil?.isRegional) && soil?.data
           );
@@ -215,6 +219,8 @@ export default function EnvironmentPanel({
                     <Building2 className="w-3 h-3 text-blue-600" />
                     Urban Soil Check Required
                   </span>
+                ) : isSoilLoading ? (
+                  <span className="text-xs text-charcoal-600" role="status">Loading soil...</span>
                 ) : (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-warm-200 border border-warm-400 text-charcoal-700 text-[10px] font-semibold uppercase tracking-wider">
                     <AlertCircle className="w-3 h-3 text-charcoal-500" />
@@ -223,7 +229,7 @@ export default function EnvironmentPanel({
                 )}
               </div>
 
-              {isExactAvailable || isRegional ? (
+              {isSoilLoading ? <LoadingSpinner size="sm" message="Loading soil..." /> : isExactAvailable || isRegional ? (
                 <div className="space-y-3">
                   {isRegional && (
                     <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
@@ -237,6 +243,15 @@ export default function EnvironmentPanel({
                       </div>
                     </div>
                   )}
+                  {soil.warning && !isRegional && (
+                    <p className="text-xs text-amber-900">{soil.warning}</p>
+                  )}
+                  {isRegional && soil.sampleLocation && (
+                    <p className="text-xs text-charcoal-600">
+                      Sample: {soil.direction}, {soil.distanceKm} km; {soil.sampleLocation.latitude.toFixed(5)}, {soil.sampleLocation.longitude.toFixed(5)}
+                    </p>
+                  )}
+                  {soil.verifiedAt && <p className="text-xs text-charcoal-500">{soil.stale ? 'Cached' : 'Retrieved'}: {new Date(soil.verifiedAt).toLocaleString()}</p>}
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                     <div className="p-3 rounded-xl bg-warm-50 border border-warm-300 space-y-1">

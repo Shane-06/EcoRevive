@@ -869,7 +869,7 @@ describe('Environmental Assessment Resilience & Persistence Tests', () => {
       // Verify in-memory cooldown was activated
       expect(provider.cooldownUntil).toBeGreaterThan(Date.now());
       // Verify outbound permit was released cleanly
-      expect(mockRepo.releaseOutboundPermit).toHaveBeenCalledWith('soilgrids', provider.instanceId);
+      expect(mockRepo.releaseOutboundPermit).toHaveBeenCalledWith('soilgrids', expect.stringContaining(provider.instanceId));
     });
 
     it('makes zero additional provider calls during active failure cooldown', async () => {
@@ -1266,7 +1266,7 @@ describe('Environmental Assessment Resilience & Persistence Tests', () => {
       expect(envResult.soil.data.ph).toBe(6.8);
 
       // Verifies regional cache has entry, but exact-site cache key does NOT have regional data
-      expect(service.regionalCache.has('regional:30.65:76.82')).toBe(true);
+      expect(service.regionalCache.has(`regional:${service.computeSoilRasterCell(30.65, 76.82).cellKey}`)).toBe(true);
       expect(service.soilCache.has('soil_exact:30.65:76.82')).toBe(false);
     });
 
@@ -1319,8 +1319,9 @@ describe('Environmental Assessment Resilience & Persistence Tests', () => {
       expect(envResult.soil.status).toBe('unavailable');
       expect(envResult.soil.reason).toBe('timeout');
 
-      // CRITICAL: Regional baseline probe MUST NOT be called when exact site timed out!
-      expect(spyRegional).not.toHaveBeenCalled();
+      // A timeout may consult cached regional data, but must never launch probes.
+      expect(spyRegional).toHaveBeenCalledWith(30.65, 76.82, { cacheOnly: true });
+      expect(mockProvider.fetchSoil).toHaveBeenCalledTimes(1);
     });
 
     it('10.4 Under-4.5-second deadline with slow probes: enforces 4,500ms ceiling and aborts in-flight requests', async () => {
@@ -1395,7 +1396,7 @@ describe('Environmental Assessment Resilience & Persistence Tests', () => {
       expect(elapsed).toBeLessThan(1000);
       expect(envResult.weather.status).toBe('available');
       expect(envResult.soil.status).toBe('unavailable');
-      expect(envResult.soil.reason).toBe('urban_mask');
+      expect(envResult.soil.reason).toBe('timeout');
       expect(probeAborted).toBe(true);
     });
 
@@ -1678,8 +1679,10 @@ describe('Environmental Assessment Resilience & Persistence Tests', () => {
       // Override deadlines to small test values (e.g. 50ms) to keep unit test fast
       const origDeadline = config.providers.soilGrids.overallDeadlineMs;
       const origExactTimeout = config.providers.soilGrids.exactTimeoutMs;
+      const origWeatherTimeout = config.providers.openMeteo.timeoutMs;
       config.providers.soilGrids.overallDeadlineMs = 80;
       config.providers.soilGrids.exactTimeoutMs = 60;
+      config.providers.openMeteo.timeoutMs = 80;
 
       const t0 = Date.now();
       try {
@@ -1690,12 +1693,13 @@ describe('Environmental Assessment Resilience & Persistence Tests', () => {
         expect(weatherSignalReceived).toBeDefined();
         expect(soilSignalReceived).toBeDefined();
         expect(envResult.weather.status).toBe('unavailable');
-        expect(envResult.weather.error).toContain('timed out');
+        expect(envResult.weather.reason).toBe('timeout');
         expect(envResult.soil.status).toBe('unavailable');
         expect(envResult.soil.reason).toBe('timeout');
       } finally {
         config.providers.soilGrids.overallDeadlineMs = origDeadline;
         config.providers.soilGrids.exactTimeoutMs = origExactTimeout;
+        config.providers.openMeteo.timeoutMs = origWeatherTimeout;
       }
     });
   });

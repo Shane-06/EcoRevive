@@ -3,7 +3,7 @@
 const config = require('../config');
 const defaultCacheRepo = require('../repositories/environmentCache.repository');
 
-const DEFAULT_FAILURE_COOLDOWN_SECONDS = 60;
+const DEFAULT_FAILURE_COOLDOWN_SECONDS = 10;
 const MAX_STALE_ENTRIES = 500;
 
 /**
@@ -97,6 +97,7 @@ class SoilGridsProvider {
     this.initPromise = null;
     this.instanceId = `sg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     this.staleSoilMap = new Map();
+    this.requestTimes = [];
   }
 
   /**
@@ -171,14 +172,14 @@ class SoilGridsProvider {
    * @returns {number}
    */
   parseRetryAfter(headers) {
-    const defaultSecs = this.failureCooldownSeconds || DEFAULT_FAILURE_COOLDOWN_SECONDS;
+    const defaultSecs = Math.max(60, this.failureCooldownSeconds || DEFAULT_FAILURE_COOLDOWN_SECONDS);
     if (!headers || typeof headers.get !== 'function') {
       return defaultSecs;
     }
     const val = headers.get('retry-after');
     if (!val) return defaultSecs;
 
-    const seconds = parseInt(val, 10);
+    const seconds = /^\d+$/.test(val.trim()) ? Number(val) : NaN;
     if (!isNaN(seconds) && seconds > 0) {
       return Math.max(30, Math.min(86400, seconds));
     }
@@ -227,6 +228,7 @@ class SoilGridsProvider {
    */
   clearStaleCache() {
     this.staleSoilMap.clear();
+    this.requestTimes = [];
   }
 
   /**
@@ -286,7 +288,7 @@ class SoilGridsProvider {
 
     // 2. Cross-instance atomic permit & persistent cooldown check
     let permit = null;
-    const activePermitHolder = parentPermitHolder || this.instanceId;
+    const activePermitHolder = parentPermitHolder || `${this.instanceId}_${Math.random().toString(36).slice(2)}`;
 
     if (!hasParentPermit && this.cacheRepo && typeof this.cacheRepo.acquireOutboundPermit === 'function') {
       permit = await this.cacheRepo.acquireOutboundPermit(
@@ -309,7 +311,6 @@ class SoilGridsProvider {
             warning: `SoilGrids provider in cooldown (${remainingSecs}s remaining). Serving cached soil properties.`,
           };
         }
-
         return {
           status: 'unavailable',
           source: 'ISRIC SoilGrids',
@@ -332,6 +333,10 @@ class SoilGridsProvider {
             warning: 'Concurrent backend request in-flight. Serving cached soil data.',
           };
         }
+        return {
+          status: 'unavailable', source: 'ISRIC SoilGrids', verifiedAt: null, data: null,
+          reason: 'provider_busy', error: 'Soil request already in progress. Please wait briefly.',
+        };
       }
     }
 
@@ -359,6 +364,26 @@ class SoilGridsProvider {
     }
 
     try {
+      // Reserve before fetch, including probes: at most five calls in a rolling minute.
+      // Aborted requests still count because they may already have reached ISRIC.
+      this.requestTimes = this.requestTimes.filter((at) => Date.now() - at < 60000);
+      if (this.requestTimes.length >= 5) {
+        return {
+          status: 'unavailable', source: 'ISRIC SoilGrids', verifiedAt: null, data: null,
+          reason: 'request_budget', remainingCooldownSeconds: Math.ceil((60000 - (Date.now() - this.requestTimes[0])) / 1000),
+          error: 'SoilGrids fair-use request budget reached. Cached data will be used where available.',
+        };
+      }
+      if (fetchAbortController.signal.aborted) throw fetchAbortController.signal.reason;
+      this.requestTimes.push(Date.now());
+      if (typeof this.cacheRepo?.reserveSoilRequest === 'function' && !await this.cacheRepo.reserveSoilRequest()) {
+        return {
+          status: 'unavailable', source: 'ISRIC SoilGrids', verifiedAt: null, data: null,
+          reason: 'request_budget', remainingCooldownSeconds: 60,
+          error: 'SoilGrids shared request budget reached or unavailable. Cached data will be used where available.',
+        };
+      }
+      if (fetchAbortController.signal.aborted) throw fetchAbortController.signal.reason;
       const url = new URL(this.baseUrl);
       url.searchParams.set('lat', latitude.toString());
       url.searchParams.set('lon', longitude.toString());
@@ -431,8 +456,8 @@ class SoilGridsProvider {
         if (!layer || !Array.isArray(layer.depths) || layer.depths.length === 0) {
           return null;
         }
-        const depth = layer.depths[0];
-        return typeof depth.values?.mean === 'number' ? depth.values.mean : null;
+        const depth = layer.depths.find((d) => d.label === '0-5cm' || (d.range?.top_depth === 0 && d.range?.bottom_depth === 5)) || layer.depths[0];
+        return Number.isFinite(depth.values?.mean) ? depth.values.mean : null;
       };
 
       const rawPh = extractLayerMean('phh2o');
@@ -484,6 +509,8 @@ class SoilGridsProvider {
           organicCarbonUnit: 'g/kg',
         },
         metadata: {
+          depth: '0-5cm',
+          isExactSiteMeasurement: false,
           spatialPrecision: 'exact_query_coordinates',
           isExactRasterCell: false,
           spatialMethod: 'approximate_wgs84_grid_bucket',

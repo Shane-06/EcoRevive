@@ -136,7 +136,7 @@ class OpenMeteoProvider {
     const val = headers.get('retry-after');
     if (!val) return DEFAULT_COOLDOWN_SECONDS;
 
-    const seconds = parseInt(val, 10);
+    const seconds = /^\d+$/.test(val.trim()) ? Number(val) : NaN;
     if (!isNaN(seconds) && seconds > 0) {
       return Math.max(1, Math.min(86400, seconds));
     }
@@ -166,6 +166,10 @@ class OpenMeteoProvider {
 
     const key = this.normalizeCoords(latitude, longitude);
     const now = Date.now();
+    const staleCandidate = this.staleWeatherMap.get(key);
+    if (staleCandidate && now - new Date(staleCandidate.verifiedAt).getTime() > config.providers.openMeteo.maxStaleMs) {
+      this.staleWeatherMap.delete(key);
+    }
     const effectiveTimeoutMs = timeoutMs || this.timeoutMs;
 
     // 1. Prevent outbound calls during active HTTP 429 cooldown (in-memory fast path)
@@ -197,7 +201,7 @@ class OpenMeteoProvider {
       permit = await this.cacheRepo.acquireOutboundPermit(
         'open-meteo',
         Math.ceil(effectiveTimeoutMs / 1000) + 2,
-        this.instanceId
+        `${this.instanceId}_${Math.random().toString(36).slice(2)}`
       );
 
       if (permit.inCooldown) {
@@ -236,6 +240,10 @@ class OpenMeteoProvider {
             warning: 'Concurrent backend request in-flight. Serving cached weather data.',
           };
         }
+        return {
+          status: 'unavailable', source: 'Open-Meteo', verifiedAt: null, data: null,
+          reason: 'provider_busy', error: 'Weather request already in progress. Please wait briefly.',
+        };
       }
     }
 
@@ -275,6 +283,7 @@ class OpenMeteoProvider {
         'temperature_2m_max,temperature_2m_min,precipitation_sum'
       );
       url.searchParams.set('timezone', 'auto');
+      url.searchParams.set('forecast_days', '1');
 
       const response = await fetch(url.toString(), {
         headers: {
@@ -351,6 +360,13 @@ class OpenMeteoProvider {
         source: 'Open-Meteo',
         verifiedAt: new Date().toISOString(),
         stale: false,
+        metadata: {
+          requestedLocation: { latitude: Number(latitude), longitude: Number(longitude) },
+          sourceLocation: { latitude: json.latitude ?? Number(latitude), longitude: json.longitude ?? Number(longitude) },
+          observationTime: current.time || null,
+          timezone: json.timezone || null,
+          spatialPrecision: 'weather_model_grid',
+        },
         data: {
           temperature: current.temperature_2m !== undefined ? current.temperature_2m : null,
           temperatureUnit: '°C',

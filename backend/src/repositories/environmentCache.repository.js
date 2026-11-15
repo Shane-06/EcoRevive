@@ -374,6 +374,34 @@ class EnvironmentCacheRepository {
       return false;
     }
   }
+
+  /** Atomic rolling-minute budget in the existing coordination table; no DDL. */
+  async reserveSoilRequest() {
+    try {
+      const sql = `
+        INSERT INTO provider_cooldowns (
+          provider_name, cooldown_until, status_code, retry_after_seconds, reason,
+          permit_holder, permit_expires_at, updated_at
+        ) VALUES ('soilgrids:request-budget', CURRENT_TIMESTAMP, 200, 0,
+          jsonb_build_array(EXTRACT(EPOCH FROM clock_timestamp()))::text,
+          NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT (provider_name) DO UPDATE SET
+          reason = ((SELECT COALESCE(jsonb_agg(value), '[]'::jsonb)
+            FROM jsonb_array_elements(provider_cooldowns.reason::jsonb)
+            WHERE value::text::double precision > EXTRACT(EPOCH FROM clock_timestamp()) - 60)
+            || EXCLUDED.reason::jsonb)::text,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE (SELECT COUNT(*) FROM jsonb_array_elements(provider_cooldowns.reason::jsonb)
+          WHERE value::text::double precision > EXTRACT(EPOCH FROM clock_timestamp()) - 60) < 5
+        RETURNING provider_name;
+      `;
+      const result = await this._query(sql);
+      return Boolean(result.rows?.length);
+    } catch (err) {
+      console.error('[EnvironmentCacheRepository] soil request budget error:', err.message);
+      return false; // fail closed; never turn a database failure into a probe storm
+    }
+  }
 }
 
 const defaultRepoInstance = new EnvironmentCacheRepository();

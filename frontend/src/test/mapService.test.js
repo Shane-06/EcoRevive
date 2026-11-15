@@ -8,6 +8,7 @@ import { suitabilityService } from '../services/suitability.service';
 describe('Milestone 14 — Frontend Service Layer Unit Tests', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    environmentService._clearInFlight();
   });
 
   describe('mapService', () => {
@@ -70,10 +71,11 @@ describe('Milestone 14 — Frontend Service Layer Unit Tests', () => {
         },
       };
 
-      const getSpy = vi.spyOn(apiClient, 'get').mockResolvedValueOnce(mockResult);
+      const getSpy = vi.spyOn(apiClient, 'get').mockResolvedValue(mockResult);
 
       const data = await environmentService.getEnvironment({ lat: 30.65, lng: 76.78 });
-      expect(getSpy).toHaveBeenCalledWith('/environment?lat=30.65&lng=76.78');
+      expect(getSpy).toHaveBeenCalledWith('/environment?lat=30.65&lng=76.78&section=weather', expect.objectContaining({ signal: expect.any(AbortSignal) }));
+      expect(getSpy).toHaveBeenCalledWith('/environment?lat=30.65&lng=76.78&section=soil', expect.objectContaining({ signal: expect.any(AbortSignal) }));
       expect(data.weather.status).toBe('available');
       expect(data.soil.data.ph).toBe(7.2);
     });

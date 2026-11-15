@@ -6,7 +6,7 @@ import EnvironmentPanel from '../components/environment/EnvironmentPanel';
 import SpeciesSelector from '../components/species/SpeciesSelector';
 import SuitabilityPanel from '../components/suitability/SuitabilityPanel';
 import mapService from '../services/map.service';
-import environmentService from '../services/environment.service';
+import environmentService, { environmentBucket } from '../services/environment.service';
 import speciesService from '../services/species.service';
 import suitabilityService from '../services/suitability.service';
 
@@ -49,6 +49,11 @@ export default function MapPage() {
   const hasInitializedRef = useRef(false);
   const debounceTimerRef = useRef(null);
   const envRequestIdRef = useRef(0);
+  const envAbortRef = useRef(null);
+  const recoveryTimerRef = useRef(null);
+  const hoverKeyRef = useRef(null);
+  const lastHoverAtRef = useRef(0);
+  const mountedRef = useRef(true);
   const suitabilityRequestIdRef = useRef(0);
   const latestCoordKeyRef = useRef(`${DEFAULT_CENTER.lat.toFixed(4)}:${DEFAULT_CENTER.lng.toFixed(4)}`);
 
@@ -73,25 +78,48 @@ export default function MapPage() {
   }, [loadSpeciesCatalog]);
 
   // 2. Fetch Environmental Data for Coordinates with Stale Protection
-  const fetchEnvironment = useCallback(async (coords) => {
+  const fetchEnvironment = useCallback(async (coords, force = false, allowRecovery = true) => {
     if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') return;
     const reqId = ++envRequestIdRef.current;
+    clearTimeout(recoveryTimerRef.current);
+    suitabilityRequestIdRef.current++;
+    setSuitability(null);
+    setSuitabilityLoading(false);
+    envAbortRef.current?.abort();
+    const controller = new AbortController();
+    envAbortRef.current = controller;
     const targetKey = `${coords.lat.toFixed(4)}:${coords.lng.toFixed(4)}`;
     latestCoordKeyRef.current = targetKey;
 
     setEnvLoading(true);
     setEnvError(null);
+    setEnvironment(environmentService.getCachedEnvironment(coords));
     try {
-      const data = await environmentService.getEnvironment({ lat: coords.lat, lng: coords.lng });
+      const data = await environmentService.getEnvironment({ lat: coords.lat, lng: coords.lng }, {
+        signal: controller.signal, force,
+        onUpdate: (partial) => {
+          if (mountedRef.current && reqId === envRequestIdRef.current) setEnvironment(partial);
+        },
+      });
       // Stale response protection: ignore if a newer request was dispatched
-      if (reqId !== envRequestIdRef.current) return;
+      if (!mountedRef.current || reqId !== envRequestIdRef.current || controller.signal.aborted) return false;
       setEnvironment(data);
+      const retryable = ['provider_busy', 'provider_cooldown', 'request_budget', 'timeout', 'connection_error'];
+      const delays = [data?.weather, data?.soil]
+        .filter((part) => part?.status === 'unavailable' && (part.isRateLimited || retryable.includes(part.reason)))
+        .map((part) => Math.max(1, part.remainingCooldownSeconds || (part.reason === 'provider_busy' ? 1 : 10)) * 1000);
+      if (allowRecovery && delays.length) {
+        recoveryTimerRef.current = setTimeout(() => {
+          if (mountedRef.current && reqId === envRequestIdRef.current) fetchEnvironment(coords, false, false);
+        }, Math.min(...delays) + 100);
+      }
+      return true;
     } catch (err) {
-      if (reqId !== envRequestIdRef.current) return;
+      if (!mountedRef.current || reqId !== envRequestIdRef.current || controller.signal.aborted) return false;
       setEnvError(err);
       setEnvironment(null);
     } finally {
-      if (reqId === envRequestIdRef.current) {
+      if (mountedRef.current && reqId === envRequestIdRef.current) {
         setEnvLoading(false);
       }
     }
@@ -131,7 +159,8 @@ export default function MapPage() {
     async (coords, speciesName) => {
       if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') return;
       try {
-        await fetchEnvironment(coords);
+        const current = await fetchEnvironment(coords);
+        if (!current) return;
       } catch {
         // Handled within fetchEnvironment state
       }
@@ -144,15 +173,41 @@ export default function MapPage() {
 
   // Run initial environment and suitability query on mount (preventing duplicate requests)
   useEffect(() => {
+    mountedRef.current = true;
     if (!hasInitializedRef.current) {
       hasInitializedRef.current = true;
       triggerAssessment(DEFAULT_CENTER, 'Neem');
     }
 
     return () => {
+      mountedRef.current = false;
+      clearTimeout(recoveryTimerRef.current);
+      envAbortRef.current?.abort();
+      hasInitializedRef.current = false;
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
   }, [triggerAssessment]);
+
+  const handleHoverLocation = useCallback((coords) => {
+    if (!coords) {
+      clearTimeout(debounceTimerRef.current);
+      hoverKeyRef.current = null;
+      return;
+    }
+    const key = `${environmentBucket(coords)}:${coords.lat.toFixed(2)}:${coords.lng.toFixed(2)}`;
+    if (hoverKeyRef.current === key) return;
+    hoverKeyRef.current = key;
+    clearTimeout(debounceTimerRef.current);
+    // A cursor must dwell in a bucket; requests start at most once per second.
+    debounceTimerRef.current = setTimeout(() => {
+      lastHoverAtRef.current = Date.now();
+      setSelectedLocation(coords);
+      setSelectedTree(null);
+      setInputLat(String(coords.lat));
+      setInputLng(String(coords.lng));
+      fetchEnvironment(coords);
+    }, Math.max(450, 1000 - (Date.now() - lastHoverAtRef.current)));
+  }, [fetchEnvironment]);
 
   // 4. Handle Viewport Change (Fetch verified trees in bounding box)
   const handleViewportChange = useCallback(async (bounds) => {
@@ -175,6 +230,9 @@ export default function MapPage() {
   // 5. Handle Location Selection on Map (Debounced 300ms for rapid clicks)
   const handleSelectLocation = useCallback(
     (coords) => {
+      hoverKeyRef.current = null;
+      envRequestIdRef.current++;
+      envAbortRef.current?.abort();
       // Immediate UI update for pin responsiveness
       setSelectedLocation(coords);
       setSelectedTree(null);
@@ -196,6 +254,9 @@ export default function MapPage() {
   // 6. Handle Tree Marker Click
   const handleSelectTree = useCallback(
     (tree) => {
+      hoverKeyRef.current = null;
+      envRequestIdRef.current++;
+      envAbortRef.current?.abort();
       setSelectedTree(tree);
       const coords = { lat: tree.latitude, lng: tree.longitude };
       setSelectedLocation(coords);
@@ -327,6 +388,7 @@ export default function MapPage() {
               selectedLocation={selectedLocation}
               selectedTree={selectedTree}
               onSelectLocation={handleSelectLocation}
+              onHoverLocation={handleHoverLocation}
               onSelectTree={handleSelectTree}
               onViewportChange={handleViewportChange}
               center={[DEFAULT_CENTER.lat, DEFAULT_CENTER.lng]}
@@ -393,7 +455,7 @@ export default function MapPage() {
                 environment={environment}
                 loading={envLoading}
                 error={envError}
-                onRefresh={() => triggerAssessment(selectedLocation, selectedSpecies)}
+                onRefresh={() => fetchEnvironment(selectedLocation, true)}
               />
             )}
 

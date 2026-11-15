@@ -59,6 +59,7 @@ describe('Milestone 7 — Environmental Information Integration Tests', () => {
     jest.spyOn(environmentCacheRepo, 'acquireOutboundPermit').mockResolvedValue({ granted: true, inCooldown: false });
     jest.spyOn(environmentCacheRepo, 'releaseOutboundPermit').mockResolvedValue(true);
     jest.spyOn(environmentCacheRepo, 'setProviderCooldown').mockResolvedValue(true);
+    jest.spyOn(environmentCacheRepo, 'reserveSoilRequest').mockResolvedValue(true);
     jest.spyOn(environmentCacheRepo, 'upsertCache').mockResolvedValue(true);
 
     environmentService.clearCache();
@@ -743,7 +744,7 @@ describe('Milestone 7 — Environmental Information Integration Tests', () => {
       // Verify exact site cache key does NOT have this regional result
       expect(environmentService.soilCache.has('30.65:76.82')).toBe(false);
       // Verify regional cache has the entry
-      expect(environmentService.regionalCache.has('regional:30.65:76.82')).toBe(true);
+      expect(environmentService.regionalCache.has(`regional:${environmentService.computeSoilRasterCell(30.65, 76.82).cellKey}`)).toBe(true);
     });
 
     it('SOIL-PARTIAL-01: assessSuitability correctly returns partial assessment when soil is unavailable', async () => {
