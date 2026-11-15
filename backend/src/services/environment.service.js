@@ -5,6 +5,8 @@ const defaultOpenMeteo = require('../integrations/openMeteo.provider');
 const defaultSoilGrids = require('../integrations/soilGrids.provider');
 const defaultCacheRepo = require('../repositories/environmentCache.repository');
 const { BadRequestError } = require('../utils/errors');
+const { MetNorwayProvider } = require('../integrations/metNorway.provider');
+const { SoilCoverageProvider } = require('../integrations/soilCoverage.provider');
 
 const MAX_CACHE_ENTRIES = 500;
 
@@ -13,6 +15,11 @@ class EnvironmentService {
     this.openMeteoProvider = deps.openMeteoProvider || defaultOpenMeteo;
     this.soilGridsProvider = deps.soilGridsProvider || defaultSoilGrids;
     this.cacheRepo = deps.cacheRepo || defaultCacheRepo;
+    this.enableAlternatives = deps.enableAlternatives ?? (!config.isTest && process.env.ENVIRONMENT_ALTERNATIVES_ENABLED !== 'false');
+    this.alternateWeather = deps.alternateWeather || new MetNorwayProvider({ cacheRepo: this.cacheRepo });
+    this.soilCoverage = deps.soilCoverage || new SoilCoverageProvider({ cacheRepo: this.cacheRepo });
+    this.coverageCache = new Map();
+    this.pendingCoverage = new Map();
 
     this.weatherCache = new Map(); // key -> { data, expiresAt, lastAccessed }
     this.weatherFailures = new Map();
@@ -84,6 +91,8 @@ class EnvironmentService {
    */
   clearCache() {
     this.weatherCache.clear();
+    this.coverageCache.clear();
+    this.pendingCoverage.clear();
     this.weatherFailures.clear();
     this.soilCache.clear();
     this.regionalCache.clear();
@@ -243,6 +252,8 @@ class EnvironmentService {
             };
           }
 
+          const fallback = await this._alternateWeather(parsedLat, parsedLng, options);
+          if (fallback) return fallback;
           return {
             status: 'unavailable',
             source: 'Open-Meteo',
@@ -258,7 +269,7 @@ class EnvironmentService {
         const result = await this.openMeteoProvider.fetchWeather({
           latitude: parsedLat,
           longitude: parsedLng,
-          timeoutMs: options.timeoutMs,
+          timeoutMs: this.enableAlternatives ? Math.min(1500, options.timeoutMs || 4500) : options.timeoutMs,
           signal: options.signal,
         });
 
@@ -288,6 +299,9 @@ class EnvironmentService {
           return result;
         }
 
+        const alternative = await this._alternateWeather(parsedLat, parsedLng, options);
+        if (alternative) return alternative;
+
         // Live request failed (429 or network) -> fallback to L2 stale candidate if within 24h
         if (dbStaleCandidate) {
           const verifiedAtMs = new Date(dbStaleCandidate.verified_at).getTime();
@@ -315,6 +329,70 @@ class EnvironmentService {
 
     this.pendingWeather.set(key, fetchPromise);
     return fetchPromise;
+  }
+
+  async _alternateWeather(lat, lng, options) {
+    if (!this.enableAlternatives || options.signal?.aborted) return null;
+    let result;
+    try { result = await this.alternateWeather.fetchWeather({ latitude: lat, longitude: lng, signal: options.signal, timeoutMs: 4000 }); }
+    catch { return null; }
+    if (result?.status !== 'available') return null;
+    const ttl = result.metadata?.cacheTtlMs || 3 * 3600000;
+    const key = this.normalizeWeatherCoords(lat, lng);
+    this._setCache(this.weatherCache, key, result, ttl);
+    try {
+      await this.cacheRepo.upsertCache?.({
+        gridKey: key, cacheType: 'weather', latitude: lat, longitude: lng,
+        source: result.source, status: 'available', data: result.data, metadata: result.metadata,
+        verifiedAt: result.verifiedAt, expiresAt: new Date(Date.now() + ttl),
+      });
+    } catch { /* Memory cache remains available if persistent caching fails. */ }
+    return result;
+  }
+
+  async getCoverageSoil(lat, lng, options = {}) {
+    const cellKey = this.computeSoilRasterCell(lat, lng).cellKey;
+    const requestKey = `${cellKey}:${options.enableRegionalBaseline === false ? 'exact' : 'hybrid'}`;
+    const cached = this.coverageCache.get(requestKey);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.data.isRegional ? this._regionalForTarget(cached.data, lat, lng) : this._soilForTarget(cached.data, lat, lng);
+    }
+    if (this.pendingCoverage.has(requestKey)) {
+      const result = await this.pendingCoverage.get(requestKey);
+      return result?.isRegional ? this._regionalForTarget(result, lat, lng) : this._soilForTarget(result, lat, lng);
+    }
+    const pending = (async () => {
+      let saved = null;
+      try {
+        const row = await this.cacheRepo.findByGridAndType?.(cellKey, 'soil_exact');
+        if (row && defaultCacheRepo.isValidSoilMeasurements(row.data)) {
+          saved = this._soilForTarget({
+            status: 'available', source: row.source, data: row.data, verifiedAt: new Date(row.verified_at).toISOString(),
+            stale: new Date(row.expires_at).getTime() <= Date.now(),
+            metadata: { ...row.metadata, sourceLocation: { latitude: Number(row.latitude), longitude: Number(row.longitude) } },
+          }, lat, lng);
+          if (!saved.stale) return saved;
+        }
+      } catch { /* Read failures do not prevent querying the public raster service. */ }
+      const regional = options.enableRegionalBaseline === false ? null : await this.getRegionalSoilBaseline(lat, lng, { cacheOnly: true });
+      if (regional && !regional.stale) return regional;
+      const result = await this.soilCoverage.fetchSoil({ latitude: lat, longitude: lng, signal: options.signal, timeoutMs: 4000, enableRegionalBaseline: options.enableRegionalBaseline !== false });
+      if (!result?.data) return saved || regional || result;
+      this._setCache(this.coverageCache, requestKey, result, result.metadata?.missingProperties?.length ? 60000 : this.SOIL_TTL_MS);
+      try {
+        await this.cacheRepo.upsertCache?.({
+          gridKey: result.isRegional ? `${cellKey}:d10` : cellKey, cacheType: result.isRegional ? 'soil_regional' : 'soil_exact',
+          latitude: result.isRegional ? lat : result.metadata.sourceLocation.latitude,
+          longitude: result.isRegional ? lng : result.metadata.sourceLocation.longitude,
+          source: result.source, status: result.status, data: result.data,
+          metadata: { ...result.metadata, isRegional: result.isRegional || false, sampleLocation: result.sampleLocation, targetLocation: result.targetLocation || { latitude: lat, longitude: lng }, distanceKm: result.distanceKm, direction: result.direction, samplingMethod: result.samplingMethod },
+          verifiedAt: result.verifiedAt, expiresAt: new Date(Date.now() + (result.metadata?.missingProperties?.length ? 60000 : this.SOIL_TTL_MS)),
+        });
+      } catch { /* Retain the bounded tile and section caches. */ }
+      return result;
+    })();
+    this.pendingCoverage.set(requestKey, pending);
+    try { return await pending; } finally { this.pendingCoverage.delete(requestKey); }
   }
 
   /**
@@ -994,6 +1072,10 @@ class EnvironmentService {
     const weatherBudget = Math.min(config.providers.openMeteo.timeoutMs, 4500);
     const resolveSoil = async (signal) => {
       const started = Date.now();
+      if (this.enableAlternatives) {
+        const coverage = await this.getCoverageSoil(parsedLat, parsedLng, { signal, enableRegionalBaseline: enableRegionalBaseline !== false && config.providers.soilGrids.enableRegionalBaseline !== false });
+        if (coverage?.data || coverage?.reason === 'urban_mask' || signal.aborted) return coverage;
+      }
       // Reuse a valid regional profile immediately when we already know this bucket
       // is masked or recently failed. Never launch probes on a timeout/error.
       const key = `soil_exact:${this.computeSoilRasterCell(parsedLat, parsedLng).cellKey}`;

@@ -22,6 +22,8 @@ export default function MapPage() {
   const [selectedTree, setSelectedTree] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState(DEFAULT_CENTER);
   const [activeTab, setActiveTab] = useState('environment'); // 'environment' | 'suitability' | 'species'
+  const [selectionLocked, setSelectionLocked] = useState(false);
+  const selectionLockedRef = useRef(false);
 
   // Coordinate Search Input State
   const [inputLat, setInputLat] = useState(String(DEFAULT_CENTER.lat));
@@ -189,6 +191,7 @@ export default function MapPage() {
   }, [triggerAssessment]);
 
   const handleHoverLocation = useCallback((coords) => {
+    if (selectionLockedRef.current) return;
     if (!coords) {
       clearTimeout(debounceTimerRef.current);
       hoverKeyRef.current = null;
@@ -230,6 +233,9 @@ export default function MapPage() {
   // 5. Handle Location Selection on Map (Debounced 300ms for rapid clicks)
   const handleSelectLocation = useCallback(
     (coords) => {
+      selectionLockedRef.current = true;
+      setSelectionLocked(true);
+      setActiveTab('environment');
       hoverKeyRef.current = null;
       envRequestIdRef.current++;
       envAbortRef.current?.abort();
@@ -254,6 +260,9 @@ export default function MapPage() {
   // 6. Handle Tree Marker Click
   const handleSelectTree = useCallback(
     (tree) => {
+      selectionLockedRef.current = true;
+      setSelectionLocked(true);
+      setActiveTab('environment');
       hoverKeyRef.current = null;
       envRequestIdRef.current++;
       envAbortRef.current?.abort();
@@ -301,6 +310,8 @@ export default function MapPage() {
 
     setCoordError(null);
     const coords = { lat, lng };
+    selectionLockedRef.current = true;
+    setSelectionLocked(true);
     setSelectedLocation(coords);
     setSelectedTree(null);
 
@@ -357,6 +368,8 @@ export default function MapPage() {
             type="button"
             onClick={() => {
               if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+              selectionLockedRef.current = true;
+              setSelectionLocked(true);
               setSelectedLocation(DEFAULT_CENTER);
               setSelectedTree(null);
               setInputLat(String(DEFAULT_CENTER.lat));
@@ -394,6 +407,15 @@ export default function MapPage() {
               center={[DEFAULT_CENTER.lat, DEFAULT_CENTER.lng]}
               zoom={12}
             />
+          </div>
+
+          <div className="flex items-center justify-between gap-3 text-xs text-charcoal-600">
+            <span>{selectionLocked ? 'Selected location locked. Click the map to assess another place.' : 'Hover to preview; click to select and keep a location.'}</span>
+            {selectionLocked && <button type="button" className="shrink-0 rounded-lg border border-warm-400 bg-white px-3 py-1.5 text-forest-900" onClick={() => {
+              selectionLockedRef.current = false;
+              setSelectionLocked(false);
+              hoverKeyRef.current = null;
+            }}>Resume hover preview</button>}
           </div>
 
           {/* Selected Tree Detail Card (If active) */}

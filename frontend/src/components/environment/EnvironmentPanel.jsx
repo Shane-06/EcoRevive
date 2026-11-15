@@ -112,7 +112,7 @@ export default function EnvironmentPanel({
               <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
                 <Clock className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-semibold">Cached Weather Observation: </span>
+                  <span className="font-semibold">{weather.metadata?.dataKind === 'model_forecast' ? 'Model Forecast: ' : 'Cached Weather Observation: '}</span>
                   <span>{weather.warning}</span>
                 </div>
               </div>
@@ -159,7 +159,14 @@ export default function EnvironmentPanel({
               </div>
             </div>
 
-            {weather.data.forecast && (
+            <div className="grid grid-cols-2 gap-2 text-xs text-charcoal-600">
+              <div>Precipitation{weather.data.precipitationPeriod === 'next_hour' ? ' (next hour)' : ''}: <strong>{weather.data.precipitation ?? '--'} {weather.data.precipitationUnit || 'mm'}</strong></div>
+              {weather.data.pressure != null && <div>Pressure: <strong>{weather.data.pressure} hPa</strong></div>}
+            </div>
+            {weather.metadata?.forecastTime && <p className="text-xs text-charcoal-500">Forecast valid: {new Date(weather.metadata.forecastTime).toLocaleString()}</p>}
+            {weather.metadata?.attribution && <a href={weather.metadata.attributionUrl} className="text-xs text-forest-700 underline" target="_blank" rel="noreferrer">{weather.metadata.attribution}</a>}
+
+            {weather.data.forecast && (weather.data.forecast.minTemp != null || weather.data.forecast.maxTemp != null) && (
               <div className="px-3.5 py-2 rounded-xl bg-warm-50 border border-warm-300 text-xs text-charcoal-600 flex items-center justify-between">
                 <span>Daily Forecast Range:</span>
                 <span className="font-semibold text-charcoal-900 font-mono">
@@ -252,6 +259,8 @@ export default function EnvironmentPanel({
                     </p>
                   )}
                   {soil.verifiedAt && <p className="text-xs text-charcoal-500">{soil.stale ? 'Cached' : 'Retrieved'}: {new Date(soil.verifiedAt).toLocaleString()}</p>}
+                  {soil.metadata?.sourceLocation && !isRegional && <p className="text-xs text-charcoal-500">Modeled sample: {soil.metadata.sourceLocation.latitude.toFixed(5)}, {soil.metadata.sourceLocation.longitude.toFixed(5)}</p>}
+                  {soil.metadata?.attribution && <a href={soil.metadata.attributionUrl} className="text-xs text-forest-700 underline" target="_blank" rel="noreferrer">{soil.metadata.attribution}</a>}
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                     <div className="p-3 rounded-xl bg-warm-50 border border-warm-300 space-y-1">

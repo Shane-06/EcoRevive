@@ -56,21 +56,26 @@ global.fetch = async (url, options) => {
 };
 
 async function main() {
+  const alternatives = process.argv.includes('--alternatives');
+  const openMeteo = new OpenMeteoProvider({ cacheRepo: memoryRepo });
+  if (alternatives) openMeteo.setCooldown(3600000);
   const service = new EnvironmentService({
     cacheRepo: memoryRepo,
-    openMeteoProvider: new OpenMeteoProvider({ cacheRepo: memoryRepo }),
+    openMeteoProvider: openMeteo,
     soilGridsProvider: new SoilGridsProvider({ cacheRepo: memoryRepo }),
+    enableAlternatives: alternatives,
   });
-  const coords = { lat: 30.65, lng: 76.78 };
+  const readCoord = (name, fallback) => Number(process.argv.find((arg) => arg.startsWith(`--${name}=`))?.split('=')[1] || fallback);
+  const coords = { lat: readCoord('lat', 30.65), lng: readCoord('lng', 76.78) };
   for (const mode of ['cold', 'warm']) {
     const started = performance.now();
     const completion = {};
     const parts = await Promise.all(['weather', 'soil'].map(async (section) => {
       const result = await service.getLocationEnvironment({ ...coords, section });
-      completion[section] = { milliseconds: Math.round(performance.now() - started), status: result[section].status, reason: result[section].reason, verifiedAt: result[section].verifiedAt };
+      completion[section] = { milliseconds: Math.round(performance.now() - started), status: result[section].status, source: result[section].source, reason: result[section].reason, verifiedAt: result[section].verifiedAt, sampleLocation: result[section].sampleLocation, direction: result[section].direction, distanceKm: result[section].distanceKm };
       return result;
     }));
-    console.log(JSON.stringify({ mode, source: 'live providers, in-memory repository; excludes Render and PostgreSQL latency', totalMs: Math.round(performance.now() - started), completion, measurements: { temperature: parts[0].weather.data?.temperature, soilPh: parts[1].soil.data?.ph }, upstream }, null, 2));
+    console.log(JSON.stringify({ mode, coords, simulatedOpenMeteoCooldown: alternatives, source: 'live providers, in-memory repository; excludes Render and PostgreSQL latency', totalMs: Math.round(performance.now() - started), completion, measurements: { weather: parts[0].weather.data, soil: parts[1].soil.data }, upstream }, null, 2));
   }
 }
 

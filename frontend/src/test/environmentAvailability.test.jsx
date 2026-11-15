@@ -8,6 +8,7 @@ import suitabilityService from '../services/suitability.service';
 import EnvironmentPanel from '../components/environment/EnvironmentPanel';
 
 vi.mock('../components/map/MapView', () => ({ default: (props) => <div>
+  <button onClick={() => props.onSelectLocation({ lat: 28.61, lng: 77.2 })}>Select Delhi</button>
   <button onMouseMove={() => props.onHoverLocation({ lat: 28.61, lng: 77.2 })}>Hover Delhi</button>
   <button onMouseMove={() => props.onHoverLocation({ lat: 19.07, lng: 72.87 })}>Hover Mumbai</button>
   <button onMouseLeave={() => props.onHoverLocation(null)}>Leave map</button>
@@ -141,5 +142,24 @@ describe('Map hover traffic controls', () => {
     expect(environmentService.getEnvironment).toHaveBeenCalledTimes(2);
     await act(async () => { vi.advanceTimersByTime(180000); });
     expect(environmentService.getEnvironment).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the clicked location selected when the cursor moves and permits explicit hover resumption', async () => {
+    render(<MapPage />);
+    await act(async () => {});
+    fireEvent.click(screen.getByText('Select Delhi'));
+    expect(screen.getByPlaceholderText(/Lat/).value).toBe('28.61');
+    await act(async () => { vi.advanceTimersByTime(300); });
+    expect(environmentService.getEnvironment.mock.calls.at(-1)[0]).toEqual({ lat: 28.61, lng: 77.2 });
+    const calls = environmentService.getEnvironment.mock.calls.length;
+    fireEvent.mouseMove(screen.getByText('Hover Mumbai'));
+    await act(async () => { vi.advanceTimersByTime(2000); });
+    expect(environmentService.getEnvironment).toHaveBeenCalledTimes(calls);
+    expect(screen.getByPlaceholderText(/Lat/).value).toBe('28.61');
+    expect(screen.getByText(/Selected location locked/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Resume hover preview'));
+    fireEvent.mouseMove(screen.getByText('Hover Mumbai'));
+    await act(async () => { vi.advanceTimersByTime(450); });
+    expect(environmentService.getEnvironment.mock.calls.at(-1)[0]).toEqual({ lat: 19.07, lng: 72.87 });
   });
 });
