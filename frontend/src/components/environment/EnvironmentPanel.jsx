@@ -105,7 +105,7 @@ export default function EnvironmentPanel({
           )}
         </div>
 
-        {weather?.status === 'loading' ? <LoadingSpinner size="sm" message="Loading weather..." /> : weather?.status === 'available' && weather.data ? (
+        {weather?.status === 'loading' ? <LoadingSpinner size="sm" message={weather.message || 'Loading weather...'} /> : weather?.status === 'available' && weather.data ? (
           <div className="space-y-3">
             {weather.verifiedAt && <p className="text-xs text-charcoal-500">{weather.stale ? 'Cached' : 'Retrieved'}: {new Date(weather.verifiedAt).toLocaleString()}</p>}
             {weather.warning && (
@@ -236,7 +236,7 @@ export default function EnvironmentPanel({
                 )}
               </div>
 
-              {isSoilLoading ? <LoadingSpinner size="sm" message="Loading soil..." /> : isExactAvailable || isRegional ? (
+              {isSoilLoading ? <LoadingSpinner size="sm" message={soil.message || 'Loading soil...'} /> : isExactAvailable || isRegional ? (
                 <div className="space-y-3">
                   {isRegional && (
                     <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">

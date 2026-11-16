@@ -23,6 +23,18 @@ beforeEach(() => { vi.restoreAllMocks(); environmentService._clearInFlight(); })
 afterEach(() => { cleanup(); environmentService._clearInFlight(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('Progressive environmental loading', () => {
+  it('publishes the startup message to all subscribers during backend recovery', async () => {
+    const replies = deferred();
+    const get = vi.spyOn(apiClient, 'get').mockReturnValue(replies.promise);
+    const first = vi.fn(), second = vi.fn();
+    const a = environmentService.getEnvironment(coords, { onUpdate: first });
+    const b = environmentService.getEnvironment(coords, { onUpdate: second });
+    get.mock.calls[0][1].onRetry({ status: 502 });
+    expect(first.mock.calls.at(-1)[0].weather.message).toContain('API is starting');
+    expect(second.mock.calls.at(-1)[0].weather.message).toContain('API is starting');
+    replies.resolve({ data: { weather, soil } });
+    await Promise.all([a, b]);
+  });
   it('publishes weather while soil is still pending, then caches both without new requests', async () => {
     const slowSoil = deferred();
     const get = vi.spyOn(apiClient, 'get').mockImplementation((url) => url.includes('section=weather')

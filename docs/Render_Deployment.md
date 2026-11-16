@@ -1,5 +1,39 @@
 # Render deployment and HTML API errors
 
+## Startup recovery verified on 16 November 2026
+
+The deployed Vercel `/api/health` route initially returned HTTP 502 with
+`X-Render-Routing: no-deploy`. A simultaneous direct Render health request
+completed successfully after 23.7 seconds. Subsequent checks returned JSON
+HTTP 200 in 0.27 seconds directly and 0.37 seconds through Vercel, with the
+database connected and recent process uptime. This establishes a temporary
+backend startup/routing failure; it does not establish whether the process
+was waking from idle or restarting during a deployment. Render's free-service
+[idle startup behavior](https://render.com/docs/free#spinning-down-on-idle)
+is consistent with these observations. The frontend's one-shot error handling
+made that temporary failure appear permanent until another user action.
+
+The API client now retries GET requests on HTTP 502, 503 and 504, using
+1, 2, 4, then at most 8 seconds between attempts. Recovery is capped at
+10 attempts and a 60-second deadline. Retry-After is respected; if its delay
+would exceed the remaining budget, the error is returned. A selected-location
+change cancels in-flight work and retry delays. Environmental panels display
+an automatic startup-retry message while waiting. Successful cached data stays
+available. Requests can opt out with `{ retryStartup: false }`.
+
+POST, PUT, PATCH and DELETE requests are never automatically replayed. HTTP
+401, 403, 404 and 429 are not retried, nor are ordinary network/CORS failures.
+A permanently unavailable service still produces a bounded error instead of
+an infinite loading state. This handles transient startup failures; it does
+not prevent the hosting platform from stopping or restarting a service.
+
+After startup, the deployed environmental endpoint returned HTTP 200 in
+3.24 seconds at latitude 30.6945, longitude 76.8357: MET Norway forecast
+temperature 24.3 C and humidity 44.5%, plus SoilGrids regional pH 6.3 sampled
+10.1 km north. These were real production responses, not mocked values.
+Code changes remain local until redeployed; the observed live recovery came
+from the backend becoming available during investigation.
+
 The frontend expects JSON from `/api/v1/*`. An error beginning with
 `<!DOCTYPE html>` means a request received a web page instead. Check the
 request URL, HTTP status, and response in the browser's Network panel.

@@ -17,8 +17,9 @@ const keyFor = (section, coords) => section === 'weather'
   : `soil:${environmentBucket(coords)}`;
 const aborted = () => new DOMException('Assessment cancelled', 'AbortError');
 
-function subscribe(entry, signal) {
+function subscribe(entry, signal, onRetry) {
   entry.users++;
+  if (onRetry) entry.progress.add(onRetry);
   return new Promise((resolve, reject) => {
     let finished = false;
     const finish = (callback, value) => {
@@ -26,6 +27,7 @@ function subscribe(entry, signal) {
       finished = true;
       signal?.removeEventListener('abort', onAbort);
       entry.users--;
+      if (onRetry) entry.progress.delete(onRetry);
       callback(value);
     };
     const onAbort = () => {
@@ -87,16 +89,19 @@ function cachedSection(section, coords) {
   return { ...stored, value: forTarget(stored.value, coords) };
 }
 
-async function loadSection(section, coords, { signal, force = false } = {}) {
+async function loadSection(section, coords, { signal, force = false, onRetry } = {}) {
   const key = keyFor(section, coords);
   const stored = cachedSection(section, coords);
   if (!force && stored && Date.now() < stored.expiresAt) return stored.value;
   let entry = pending.get(key);
   if (!entry) {
     const controller = new AbortController();
-    entry = { key, controller, users: 0 };
+    entry = { key, controller, users: 0, progress: new Set() };
     const query = new URLSearchParams({ lat: String(coords.lat), lng: String(coords.lng), section });
-    entry.promise = apiClient.get(`/environment?${query}`, { signal: controller.signal })
+    entry.promise = apiClient.get(`/environment?${query}`, {
+      signal: controller.signal,
+      onRetry: (progress) => { for (const callback of entry.progress) callback(progress); },
+    })
       .then((response) => {
         const value = response.data[section];
         if (!value) throw new Error(`Missing ${section} response`);
@@ -114,7 +119,7 @@ async function loadSection(section, coords, { signal, force = false } = {}) {
       }).finally(() => { if (pending.get(key) === entry) pending.delete(key); });
     pending.set(key, entry);
   }
-  return forTarget(await subscribe(entry, signal), coords);
+  return forTarget(await subscribe(entry, signal, onRetry), coords);
 }
 
 /**
@@ -152,7 +157,11 @@ export const environmentService = {
     onUpdate?.(result);
     await Promise.all(['weather', 'soil'].map(async (section) => {
       try {
-        const value = await loadSection(section, coords, { signal, force });
+        const value = await loadSection(section, coords, { signal, force, onRetry: () => {
+          if (signal?.aborted) return;
+          result = { ...result, [section]: { ...result[section], message: 'The API is starting. Retrying automatically...' } };
+          onUpdate?.(result);
+        } });
         if (signal?.aborted) throw aborted();
         result = { ...result, [section]: value };
       } catch (err) {

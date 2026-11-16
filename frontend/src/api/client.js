@@ -1,6 +1,55 @@
 import { STORAGE_KEYS } from '../utils/constants';
 import { storage } from '../utils/storage';
 
+const STARTUP_RETRY_BUDGET_MS = 60000;
+const MAX_STARTUP_ATTEMPTS = 10;
+const TRANSIENT_GATEWAY_STATUSES = new Set([502, 503, 504]);
+
+function waitForRetry(milliseconds, signal) {
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', abort);
+      reject(signal.reason || new DOMException('Request cancelled', 'AbortError'));
+    };
+    const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve(); }, milliseconds);
+    if (signal.aborted) abort();
+    else signal.addEventListener('abort', abort, { once: true });
+  });
+}
+
+async function fetchWithStartupRecovery(url, config, { retryStartup = true, onRetry } = {}) {
+  // GET requests can safely recover from a sleeping host. Never replay a mutation:
+  // a gateway failure does not prove that the original write was not processed.
+  if (!retryStartup || (config.method || 'GET').toUpperCase() !== 'GET') return fetch(url, config);
+  const controller = new AbortController();
+  const cancel = () => controller.abort(config.signal.reason);
+  if (config.signal?.aborted) cancel();
+  else config.signal?.addEventListener('abort', cancel, { once: true });
+  const started = Date.now();
+  const timer = setTimeout(() => controller.abort(new DOMException('API startup deadline exceeded', 'TimeoutError')), STARTUP_RETRY_BUDGET_MS);
+  try {
+    for (let attempt = 1; ; attempt++) {
+      controller.signal.throwIfAborted();
+      const response = await fetch(url, { ...config, signal: controller.signal });
+      const remaining = STARTUP_RETRY_BUDGET_MS - (Date.now() - started);
+      const delay = Math.min(8000, 1000 * 2 ** (attempt - 1));
+      if (!TRANSIENT_GATEWAY_STATUSES.has(response.status) || attempt >= MAX_STARTUP_ATTEMPTS || delay >= remaining) return response;
+      // Honor an upstream backoff instead of retrying before Retry-After expires.
+      const header = response.headers.get('retry-after');
+      const retryAfterMs = /^\d+$/.test(header || '') ? Number(header) * 1000 : Date.parse(header) - Date.now();
+      const pause = Math.max(delay, Number.isFinite(retryAfterMs) ? retryAfterMs : 0);
+      if (pause >= remaining) return response;
+      await response.body?.cancel();
+      onRetry?.({ attempt, status: response.status, delayMs: pause });
+      await waitForRetry(pause, controller.signal);
+    }
+  } finally {
+    clearTimeout(timer);
+    config.signal?.removeEventListener('abort', cancel);
+  }
+}
+
 /**
  * Standardized API Client Error
  */
@@ -60,6 +109,7 @@ class ApiClient {
    * @returns {Promise<any>}
    */
   async request(endpoint, options = {}) {
+    const { retryStartup, onRetry, ...fetchOptions } = options;
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     const url = `${this.baseUrl}${cleanEndpoint}`;
 
@@ -80,13 +130,13 @@ class ApiClient {
     }
 
     const config = {
-      ...options,
+      ...fetchOptions,
       headers,
       body,
     };
 
     try {
-      const response = await fetch(url, config);
+      const response = await fetchWithStartupRecovery(url, config, { retryStartup, onRetry });
 
       if (response.status === 204) {
         return null;
@@ -130,6 +180,10 @@ class ApiClient {
     } catch (err) {
       if (err instanceof ApiClientError) {
         throw err;
+      }
+      if (options.signal?.aborted || err.name === 'AbortError') throw err;
+      if (err.name === 'TimeoutError') {
+        throw new ApiClientError('The API did not become available within one minute. Please try again shortly.', 503, 'SERVICE_UNAVAILABLE');
       }
       throw new ApiClientError(err.message || 'Network request failed', 0, 'NETWORK_ERROR');
     }

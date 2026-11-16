@@ -131,7 +131,7 @@ describe('Frontend Foundation — API Client Tests', () => {
       text: readBody,
     });
 
-    const error = await apiClient.get('/environment?lat=30&lng=76').catch((err) => err);
+    const error = await apiClient.get('/environment?lat=30&lng=76', { retryStartup: false }).catch((err) => err);
     expect(error).toBeInstanceOf(ApiClientError);
     expect(error.statusCode).toBe(status);
     expect(error.code).toBe(status >= 500 ? 'SERVICE_UNAVAILABLE' : 'INVALID_API_RESPONSE');
